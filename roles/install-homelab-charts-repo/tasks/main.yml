@@ -1,0 +1,18 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for install-homelab-charts-repo
+- name: Preflight checks
+  block:
+    - name: Check if the homelab-charts helm repo is already installed
+      ansible.builtin.shell: helm repo list | grep -c {{ ihc_repo_helm_repo }} || /bin/true
+      register: helm_repo_installed
+
+- name: Install the helm repo for homelab-charts
+  when: helm_repo_installed.stdout == "0"
+  block:
+
+  - name: Install the helm-charts helm repo
+    ansible.builtin.shell: helm repo add homelab-charts {{ ihc_repo_helm_repo }}
+
+- name: Update helm repositories
+  ansible.builtin.shell: helm repo update

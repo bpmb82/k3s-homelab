@@ -1,0 +1,10 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: "loadbalancer-pool"
+spec:
+  blocks:
+  - cidr: "{{ ik3s_loadbalancer_cidr }}"
+  serviceSelector:
+    matchLabels:
+      "io.kubernetes.service.namespace": "{{ ik3s_traefik_namespace }}"

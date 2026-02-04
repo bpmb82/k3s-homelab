@@ -1,0 +1,64 @@
+environment:
+  - name: PUID
+    value: "1000"
+  - name: PGID
+    value: "1000"
+  - name: TZ
+    value: "UTC"
+  - name: JELLYFIN_PublishedServerUrl
+    value: "{{ jf_service }}.{{ domain }}"
+{% if nfd_enabled %}
+{%   if nvidia_enabled %}
+  - name: NVIDIA_VISIBLE_DEVICES
+    value: "all"
+
+runtimeClassName: nvidia
+{%   endif %}
+
+{%   if intel_enabled or nvidia_enabled %}
+resources:
+  limits:
+{%     if nvidia_enabled %}
+    nvidia.com/gpu: 1
+{%     endif %}
+{%     if intel_enabled %}
+    gpu.intel.com/i915: 1
+{%     endif %}
+  requests:
+{%     if nvidia_enabled %}
+    nvidia.com/gpu: 1
+{%     endif %}
+{%     if intel_enabled %}
+    gpu.intel.com/i915: 1
+{%     endif %}
+
+strategy:
+  type: Recreate
+
+nodeSelector:
+{%     if nvidia_enabled %}
+  nvidia.com/gpu.present: "true"
+{%     endif %}
+{%     if intel_enabled %}
+  intel.feature.node.kubernetes.io/gpu: "true"
+{%     endif %}
+{%   endif %}
+{% endif %}
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ jf_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ jf_service }}-config
+  - name: {{ jf_service }}-downloads
+    persistentVolumeClaim:
+      claimName: {{ jf_service }}-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ jf_service }}-config
+    mountPath: /config
+    readOnly: false
+  - name: {{ jf_service }}-downloads
+    mountPath: /downloads
+    readOnly: false

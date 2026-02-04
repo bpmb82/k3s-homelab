@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ sabnzbd_service }}
+  namespace: {{ sabnzbd_kube_namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`{{ sabnzbd_service }}.{{ domain }}`)
+    kind: Rule
+    services:
+      - name: {{ sabnzbd_service }}
+        port: {{ sabnzbd_service_port }}
+        scheme: http
+  tls:
+    certResolver: acme_resolver

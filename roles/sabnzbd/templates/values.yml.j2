@@ -1,0 +1,17 @@
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ sabnzbd_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ sabnzbd_service }}-config
+  - name: {{ sabnzbd_service }}-downloads
+    persistentVolumeClaim:
+      claimName: {{ sabnzbd_service }}-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ sabnzbd_service }}-config
+    mountPath: /config
+    readOnly: false
+  - name: {{ sabnzbd_service }}-downloads
+    mountPath: /downloads
+    readOnly: false

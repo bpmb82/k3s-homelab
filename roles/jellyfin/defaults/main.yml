@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for jellyfin
+jf_kube_namespace: "jellyfin"
+jf_service: "jellyfin"
+jf_service_port: 8096
+jf_helm_repo: "https://bpmb82.github.io/homelab-charts/"

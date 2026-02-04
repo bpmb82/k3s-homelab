@@ -1,0 +1,58 @@
+image:
+  tag: "{{ trfk_version }}"
+deployment:
+  hostNetwork: false
+
+service:
+  enabled: true
+
+ports:
+  web:
+    port: 80
+{% if trfk_websecure %}
+  websecure:
+    port: 443
+{% endif %}
+{% if trfk_dnschallenge %}
+envFrom:
+  - secretRef:
+      name: traefik-dnschallenge-credentials
+{% endif %}
+additionalArguments:
+  - --providers.kubernetesgateway=true
+  - --providers.kubernetescrd.allowCrossNamespace=true
+{% if trfk_loadbalancer and trfk_trusted_ips == "" %}
+  - --entryPoints.web.proxyProtocol.insecure
+  - --entryPoints.web.forwardedHeaders.insecure
+{%   if trfk_websecure %}
+  - --entryPoints.websecure.proxyProtocol.insecure
+  - --entryPoints.websecure.forwardedHeaders.insecure
+{%   endif %}
+{% elif trfk_loadbalancer and trfk_trusted_ips != "" %}
+  - --entryPoints.web.proxyProtocol.trustedIPs={{ trfk_trusted_ips }}
+  - --entryPoints.web.forwardedHeaders.trustedIPs={{ trfk_trusted_ips }}
+{% if trfk_websecure %}
+  - --entryPoints.websecure.proxyProtocol.trustedIPs={{ trfk_trusted_ips }}
+  - --entryPoints.websecure.forwardedHeaders.trustedIPs={{ trfk_trusted_ips }}
+{% endif %}
+{% endif %}
+{% if trfk_websecure %}
+  - --entrypoints.web.http.redirections.entryPoint.to=websecure
+  - --entrypoints.web.http.redirections.entryPoint.scheme=https
+{% endif %}
+  - --log.level={{ trfk_loglevel }}
+  - --accesslog
+{% if trfk_dnschallenge %}
+  - --certificatesresolvers.acme_resolver.acme.dnschallenge=true
+  - --certificatesresolvers.acme_resolver.acme.dnschallenge.provider={{ trfk_acme_provider }}
+  - --certificatesresolvers.acme_resolver.acme.email={{ trfk_acme_email }}
+  - --certificatesresolvers.acme_resolver.acme.storage=/data/acme.json
+  - --entrypoints.websecure.http.tls.certResolver=acme_resolver
+  - --entrypoints.websecure.http.tls.domains[0].main={{ trfk_domain | default("{{ trfk_domain }}", true ) }}
+  - --entrypoints.websecure.http.tls.domains[0].sans=*.{{ trfk_domain | default("{{ trfk_domain }}", true) }}
+{% endif %}
+{% if trfk_loadbalancer %}
+service:
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-enable-proxy-protocol: "true"
+{% endif %}

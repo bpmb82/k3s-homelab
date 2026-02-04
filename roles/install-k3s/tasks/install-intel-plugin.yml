@@ -1,0 +1,32 @@
+---
+- name: Check if we are already running nfd on this server
+  ansible.builtin.shell: kubectl get namespaces -l kubernetes.io/metadata.name={{ ik3s_intel_namespace}} -o json | jq '.items.[].metadata.name'
+  register: ik3s_intel_running
+
+- name: Install intel
+  when: ik3s_intel_running.stdout != ik3s_intel_namespace
+  block:
+
+    - name: Create the intel namespace
+      ansible.builtin.shell: kubectl create namespace {{ ik3s_intel_namespace }} || /bin/true
+
+- name: Create Intel GPU Plugin NodeFeatureRules to detect GPUs on nodes
+  ansible.builtin.shell: |
+    kubectl apply -k 'https://github.com/intel/intel-device-plugins-for-kubernetes/deployments/nfd/overlays/node-feature-rules?ref={{ ik3s_intel_release }}' \
+    -n {{ ik3s_intel_namespace }}
+
+- name: Create Intel GPU plugin daemonset
+  ansible.builtin.shell: |
+    kubectl apply -k 'https://github.com/intel/intel-device-plugins-for-kubernetes/deployments/gpu_plugin/overlays/nfd_labeled_nodes?ref={{ ik3s_intel_release }}' \
+    -n {{ ik3s_intel_namespace }}
+
+- name: Check if the daemonset is installed and ready
+  ansible.builtin.shell: |
+    kubectl get daemonsets.apps -n intel-gpu-plugin --selector=app=intel-gpu-plugin -o json | jq '.items[].status.numberReady'
+  register: ik3s_intel_daemonset_ready
+  until: ik3s_intel_daemonset_ready.stdout | int == 1
+  retries: 15
+  delay: 20
+
+- name: Wait for intel to be ready
+  ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app=intel-gpu-plugin --timeout=300s -n {{ ik3s_intel_namespace }}

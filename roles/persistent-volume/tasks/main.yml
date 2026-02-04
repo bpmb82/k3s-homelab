@@ -1,0 +1,50 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for persistent-volume
+- name: Make sure the host path exists
+  ansible.builtin.file:
+    path: "{{ pv_host_path }}"
+    state: directory
+    recurse: true
+    mode: "0755"
+
+- name: Get and set volume size if not predefined, we take the whole disk size
+  when: pv_volume_size is undefined
+  block:
+    - name: Get the size of the volume we will create
+      ansible.builtin.shell: echo $(df --block-size=G --output=size {{ pv_host_path }} | tail -n 1)i
+      register: pv_capacity
+
+    - name: Set the size of the volume we will create
+      ansible.builtin.set_fact:
+        pv_volume_size: "{{ pv_capacity.stdout }}"
+
+- name: Create the namespace if it doesn't exist yet
+  ansible.builtin.shell: kubectl create namespace {{ pv_kube_namespace }}
+  ignore_errors: true
+
+- name: Copy the config file
+  ansible.builtin.template:
+    src: templates/persistentvolume.yml.j2
+    dest: "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolume.yml"
+    mode: "0644"
+  when: pv_pvc_only == false
+
+- name: Copy the persistent volume claim config
+  ansible.builtin.template:
+    src: templates/persistentvolumeclaim.yml.j2
+    dest: "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolumeclaim.yml"
+    mode: "0644"
+  when: pv_pv_only == false
+
+- name: Deploy the config files we just created
+  when: pv_deploy
+  block:
+
+    - name: Apply the PV
+      ansible.builtin.shell: kubectl apply -f "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolume.yml"
+      when: pv_pvc_only == false
+
+    - name: Apply the PVC
+      ansible.builtin.shell: kubectl apply -f "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolumeclaim.yml"
+      when: pv_pv_only == false

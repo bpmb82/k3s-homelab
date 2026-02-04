@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: "{{ pv_name_label }}"
+  labels:
+    type: "local"
+spec:
+  storageClassName: "{{ pv_name_label}}"
+  capacity:
+    storage: "{{ pv_volume_size }}"
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "{{ pv_host_path }}"
+---

@@ -1,0 +1,4 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for install-homelab-charts-repo
+ihc_repo_helm_repo: "https://bpmb82.github.io/homelab-charts/"

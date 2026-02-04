@@ -1,0 +1,25 @@
+# akri-cp210x.yaml
+apiVersion: akri.sh/v0
+kind: Configuration
+metadata:
+  name: akri-{{ item.name }}
+  namespace: {{ ik3s_akri_namespace }}
+spec:
+  discoveryHandler:
+    name: udev
+    discoveryDetails: |
+      groupRecursive: true
+      udevRules:
+        - 'ATTRS{idVendor}=="{{ item.vendor }}", ATTRS{idProduct}=="{{ item.product }}"'
+  brokerSpec:
+    brokerPodSpec:
+      containers:
+      - name: akri-{{ item.name }}-broker
+        image: registry.k8s.io/pause:latest
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+          limits:
+            cpu: 30m
+            memory: 30Mi

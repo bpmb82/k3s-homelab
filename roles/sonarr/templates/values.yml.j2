@@ -1,0 +1,17 @@
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ snr_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ snr_service }}-config
+  - name: {{ snr_service }}-downloads
+    persistentVolumeClaim:
+      claimName: {{ snr_service }}-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ snr_service }}-config
+    mountPath: /config
+    readOnly: false
+  - name: {{ snr_service }}-downloads
+    mountPath: /downloads
+    readOnly: false

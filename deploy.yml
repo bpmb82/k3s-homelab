@@ -1,0 +1,58 @@
+---
+- name: Install k3s and helm, deploy traefik and then any other enabled services
+  hosts: localhost
+  gather_facts: true
+  become: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  vars_files:
+    - .env.yml
+
+  roles:
+    - role: install-k3s
+      vars:
+        ik3s_workdir: "{{ workdir }}"
+        ik3s_nfd_enabled: "{{ nfd_enabled }}"
+        ik3s_nvidia_enabled: "{{ nvidia_enabled }}"
+        ik3s_intel_enabled: "{{ intel_enabled }}"
+        ik3s_akri_enabled: "{{ akri_enabled }}"
+        ik3s_udev: "{{ udev }}"
+        ik3s_loadbalancer_cidr: "{{ loadbalancer_cidr }}"
+
+    - role: install-homelab-charts-repo
+
+    - role: traefik
+      vars:
+        traefik_loglevel: "DEBUG"
+        traefik_domain: "{{ domain }}"
+      when: traefik
+
+    - role: homeassistant
+      vars:
+        ha_workdir: "{{ workdir }}"
+        ha_akri_enabled: "{{ akri_enabled }}"
+        ha_udev: "{{ udev }}"
+      when: homeassistant
+
+    # - role: persistent-volume
+    #   vars:
+    #     pv_host_path: "{{ downloads_dir }}"
+    #     pv_name_label: "downloads"
+    #     pv_servicedir: "{{ workdir }}"
+    #     pv_pv_only: true
+    #   when: persistent_volume
+
+    - role: sabnzbd
+      when: sabnzbd
+
+    - role: sonarr
+      when: sonarr
+
+    - role: radarr
+      when: radarr
+
+    - role: jellyfin
+      when: jellyfin
+
+    - role: slskd
+      when: slskd

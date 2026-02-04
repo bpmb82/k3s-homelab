@@ -1,0 +1,42 @@
+---
+- name: Create a workdir for akri
+  ansible.builtin.file:
+    path: "{{ ik3s_workdir }}/akri"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Check if akri is already installed
+  ansible.builtin.shell: helm repo list | grep -c {{ ik3s_akri_helm_repo }} || /bin/true
+  register: ik3s_helm_repo_exists
+
+- name: Add akri helm repository
+  ansible.builtin.shell: helm repo add akri-helm-charts {{ ik3s_akri_helm_repo }}
+  when: ik3s_helm_repo_exists.stdout == "0"
+
+- name: Check if we are already running akri on this server
+  ansible.builtin.shell: kubectl get pod --namespace={{ ik3s_akri_namespace }} | grep akri | grep -c Running || /bin/true
+  register: ik3s_akri_running
+
+- name: Copy the values file
+  ansible.builtin.template:
+    src: templates/akri-udev.yml.j2
+    dest: "{{ ik3s_workdir }}/akri/akri-udev-{{ item.name }}.yml"
+    mode: '0644'
+  loop: "{{ ik3s_udev }}"
+
+- name: Install akri core components
+  ansible.builtin.shell: |
+    helm upgrade --install akri akri-helm-charts/akri \
+      --set agent.brokerPod.image.repository=registry.k8s.io/pause \
+      --set udev.discovery.enabled=true \
+      --namespace {{ ik3s_akri_namespace }} --create-namespace
+
+- name: Wait until all the akri pods are running
+  ansible.builtin.shell: kubectl wait --for=condition=Ready pod --all --namespace={{ ik3s_akri_namespace }} --timeout=300s
+
+- name: Apply the configurations
+  ansible.builtin.shell: |
+    kubectl apply -f {{ ik3s_workdir }}/akri/akri-udev-{{ item.name }}.yml
+  loop: "{{ ik3s_udev }}"

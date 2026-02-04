@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for slskd
+slskd_kube_namespace: "slskd"
+slskd_service: "slskd"
+slskd_service_port: 5030
+slskd_helm_repo: "https://bpmb82.github.io/homelab-charts/"

@@ -1,0 +1,10 @@
+# cilium-l2-policy.yml
+apiVersion: "cilium.io/v2alpha1"
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: "l2-policy"
+spec:
+  interfaces:
+    - {{ ik3s_selected_interface }}
+  externalIPs: true
+  loadBalancerIPs: true

@@ -1,0 +1,89 @@
+---
+# tasks file for k3s-traefik
+- name: Create workdir
+  ansible.builtin.shell: mkdir -p "{{ trfk_workdir }}/traefik"
+  ignore_errors: true
+
+- name: Check if the Traefik helm repo is already installed
+  ansible.builtin.shell: helm repo list | grep -c traefik || /bin/true
+  register: trfk_repo_installed
+  run_once: true
+
+- name: Check if the installed Traefik helm repo URL is correct
+  ansible.builtin.shell: helm repo list | grep -c "{{ trfk_helm_repo }}" || /bin/true
+  register: trfk_repo_url
+  when: trfk_repo_installed.stdout == "1"
+  run_once: true
+
+- name: Remove the Traefik helm repo if the URL is incorrect
+  ansible.builtin.shell: helm repo remove traefik
+  when: trfk_repo_installed.stdout == "1" and trfk_repo_url.stdout == "0"
+  register: trfk_repo_removed
+  run_once: true
+
+- name: Add the Traefik helm repo if it is not installed or was removed
+  run_once: true
+  block:
+  - name: Add Traefik helm repo
+    ansible.builtin.shell: helm repo add traefik {{ trfk_helm_repo }}
+
+  - name: Update helm repositories
+    ansible.builtin.shell: helm repo update
+
+  when: trfk_repo_installed.stdout == "0" or trfk_repo_removed is changed
+
+- name: Install Traefik CRD's
+  ansible.builtin.shell: kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+  run_once: true
+
+- name: Install Traefik RBAC
+  ansible.builtin.shell: kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+  run_once: true
+
+- name: Check if we are already running traefik on this server
+  ansible.builtin.shell: kubectl get pod -n {{ trfk_kube_namespace }} | grep traefik | grep -c Running || /bin/true
+  register: trfk_upgrade
+  run_once: true
+
+- name: Copy Traefik values template
+  ansible.builtin.template:
+    src: templates/values.yml.j2
+    dest: "{{ trfk_workdir }}/traefik/values_traefik.yml"
+    mode: "0644"
+
+- name: Traefik secrets if letsencrypt is enabled
+  run_once: true
+  block:
+
+  - name: Create the namespace
+    ansible.builtin.shell: kubectl create namespace {{ trfk_kube_namespace }}
+    ignore_errors: true
+
+  - name: Copy Traefik secrets file
+    ansible.builtin.template:
+      src: templates/secrets.yml.j2
+      dest: "{{ trfk_workdir }}/traefik/trfk_secrets.yml"
+      mode: "0600"
+
+  - name: Apply the secret
+    ansible.builtin.shell: kubectl apply -f "{{ trfk_workdir }}/traefik/trfk_secrets.yml"
+
+  - name: Remove the secrets file
+    ansible.builtin.file: # This path seems incorrect, it should probably be in the trfk_workdir
+      path: "{{ trfk_workdir }}/traefik/trfk_secrets.yml"
+      state: absent
+
+  when: trfk_dnschallenge
+
+- name: Install traefik
+  ansible.builtin.shell: helm install traefik traefik/traefik --namespace {{ trfk_kube_namespace }} --create-namespace --values={{ trfk_workdir }}/traefik/values_traefik.yml
+  when: trfk_upgrade.stdout | int == 0
+  run_once: true
+
+- name: Upgrade traefik
+  ansible.builtin.shell: helm upgrade traefik traefik/traefik --namespace {{ trfk_kube_namespace }} --create-namespace --values={{ trfk_workdir }}/traefik/values_traefik.yml
+  when: trfk_upgrade.stdout | int == 1
+  run_once: true
+
+- name: Wait for traefik to be running
+  ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=traefik --timeout=300s -n {{ trfk_kube_namespace }}

@@ -1,0 +1,17 @@
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ slskd_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ slskd_service }}-config
+  - name: {{ slskd_service }}-downloads
+    persistentVolumeClaim:
+      claimName: {{ slskd_service }}-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ slskd_service }}-config
+    mountPath: /config
+    readOnly: false
+  - name: {{ slskd_service }}-downloads
+    mountPath: /downloads
+    readOnly: false

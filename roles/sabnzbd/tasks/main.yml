@@ -1,0 +1,99 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for sabnzbd
+- name: Preflight checks
+  block:
+    - name: Check if the homelab-charts helm repo is already installed
+      ansible.builtin.shell: helm repo list | grep -c {{ sabnzbd_helm_repo }} || /bin/true
+      register: sabnzbd_helm_repo_installed
+
+    - name: Fail the playbook if the helm-charts helm repo is not installed
+      ansible.builtin.fail:
+        msg: "The helm-charts helm repo is not installed. Please run the helm-charts role first."
+      when: sabnzbd_helm_repo_installed.stdout == "0"
+
+  rescue:
+    - name: Install the helm-charts helm repo
+      ansible.builtin.include_role:
+        name: install-homelab-charts-repo
+
+- name: Create workdir
+  ansible.builtin.shell: mkdir -p "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}/config"
+  ignore_errors: true
+
+- name: Update helm repositories
+  ansible.builtin.shell: helm repo update
+
+- name: Copy values.yml template
+  ansible.builtin.template:
+    src: templates/values.yml.j2
+    dest: "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}/values.yml"
+    mode: "0644"
+
+- name: Check if we are already running {{ sabnzbd_service }} on this server
+  ansible.builtin.shell: kubectl get pod --namespace={{ sabnzbd_kube_namespace }} | grep {{ sabnzbd_service }} | grep -c Running || /bin/true
+  register: sabnzbd_service_upgrade
+
+- name: Install or update {{ sabnzbd_service }}
+  when: sabnzbd_service_upgrade.stdout == "0"
+  block:
+
+    - name: Create config PV and PVC
+      ansible.builtin.import_role:
+        name: persistent-volume
+      vars:
+        pv_name_label: "{{ sabnzbd_service }}-config"
+        pv_kube_namespace: "{{ sabnzbd_kube_namespace }}"
+        pv_host_path: "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}/config"
+        pv_servicedir: "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}"
+
+    - name: Create downloads PVC
+      ansible.builtin.import_role:
+        name: persistent-volume
+      vars:
+        pv_name_label: "{{ sabnzbd_service }}-downloads"
+        pv_kube_namespace: "{{ sabnzbd_kube_namespace }}"
+        pv_host_path: "{{ downloads_dir }}"
+        pv_servicedir: "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}"
+
+    - name: Install {{ sabnzbd_service }}
+      ansible.builtin.shell: helm install {{ sabnzbd_service }} homelab-charts/{{ sabnzbd_service }} --namespace={{ sabnzbd_kube_namespace }} --values="{{ workdir }}/{{ sabnzbd_service }}/values.yml"
+
+    - name: Copy traefik ingress
+      ansible.builtin.template:
+        src: templates/traefik_ingress.yml.j2
+        dest: "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}/traefik_ingress.yml"
+        mode: "0644"
+
+    - name: Deploy traefik ingress
+      ansible.builtin.shell: kubectl apply -f "{{ sabnzbd_workdir }}/{{ sabnzbd_service }}/traefik_ingress.yml"
+
+    - name: Wait until {{ sabnzbd_service }} is running
+      ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name={{ sabnzbd_service }} --timeout=300s -n {{ sabnzbd_kube_namespace }}
+
+    - name: Wait until {{ sabnzbd_service }} finished its configuration
+      ansible.builtin.shell: grep -c host_whitelist {{ sabnzbd_workdir }}/{{ sabnzbd_service }}/config/{{ sabnzbd_service }}.ini
+      register: sabnzbd_config_ready
+      until: sabnzbd_config_ready.stdout == "1"
+      retries: 40
+      delay: 20
+
+    - name: Get configuration
+      ansible.builtin.shell: "awk '/host_whitelist/{print $3}' {{ sabnzbd_workdir }}/{{ sabnzbd_service }}/config/{{ sabnzbd_service }}.ini | tr -d ,"
+      register: sabnzbd_host_whitelist
+
+    - name: Change the configuration
+      ansible.builtin.shell: "sed -i 's/{{ sabnzbd_host_whitelist.stdout }}/{{ sabnzbd_service }}.{{ domain }}/g' {{ sabnzbd_workdir }}/{{ sabnzbd_service }}/config/{{ sabnzbd_service }}.ini"
+
+    - name: Restart {{ sabnzbd_service }}
+      ansible.builtin.shell: kubectl rollout restart deployment/{{ sabnzbd_service }} -n {{ sabnzbd_kube_namespace }}
+
+    - name: Wait until {{ sabnzbd_service }} is running
+      ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name={{ sabnzbd_service }} --timeout=300s -n {{ sabnzbd_kube_namespace }}
+
+- name: Upgrade {{ sabnzbd_service }}
+  when: sabnzbd_service_upgrade.stdout == "1"
+  block:
+    - name: Upgrade {{ sabnzbd_service }}
+      ansible.builtin.shell: helm upgrade {{ sabnzbd_service }} homelab-charts/{{ sabnzbd_service }} --namespace={{ sabnzbd_kube_namespace }} --values="{{ workdir }}/{{ sabnzbd_service }}/values.yml"
+      when: sabnzbd_service_upgrade.stdout == "1"

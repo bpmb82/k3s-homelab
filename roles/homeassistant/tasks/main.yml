@@ -1,0 +1,96 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for {{ service }}
+- name: Preflight checks
+  block:
+    - name: Check if the homelab-charts helm repo is already installed
+      ansible.builtin.shell: helm repo list | grep -c {{ ha_helm_repo }} || /bin/true
+      register: ha_helm_repo_installed
+
+    - name: Fail the playbook if the helm-charts helm repo is not installed
+      ansible.builtin.fail:
+        msg: "The helm-charts helm repo is not installed. Please run the helm-charts role first."
+      when: ha_helm_repo_installed.stdout == "0"
+
+  rescue:
+    - name: Install the helm-charts helm repo
+      ansible.builtin.include_role:
+        name: install-homelab-charts-repo
+
+- name: Create workdir
+  ansible.builtin.shell: mkdir -p "{{ ha_workdir }}/{{ ha_service }}/config"
+  ignore_errors: true
+
+- name: Create wakeonlan files if enabled
+  ansible.builtin.include_tasks: wakeonlan.yml
+  when: ha_wakeonlan is defined
+
+- name: Copy configuration file if it does not exist
+  ansible.builtin.template:
+    src: templates/configuration.yaml.j2
+    dest: "{{ ha_workdir }}/{{ ha_service }}/config/configuration.yaml"
+    mode: "0644"
+    force: false
+
+- name: Update helm repositories
+  ansible.builtin.shell: helm repo update
+
+- name: Check if we are already running {{ ha_service }} on this server
+  ansible.builtin.shell: kubectl get pod --namespace={{ ha_kube_namespace }} | grep {{ ha_service }} | grep -c Running || /bin/true
+  register: service_upgrade
+
+- name: Copy values.yml file
+  ansible.builtin.template:
+    src: templates/values.yml.j2
+    dest: "{{ ha_workdir }}/{{ ha_service }}/values.yml"
+    mode: "0666"
+
+- name: Get the reverse proxy CIDR (we will use the pod CIDR of the cluster)
+  ansible.builtin.shell: echo -n "$(kubectl get nodes -o jsonpath='{.items[0].spec.podCIDR}' | awk -F. '{print $1"."$2}').0.0/16"
+  register: reverse_proxy_cidr
+
+- name: Create PV and PVC for {{ ha_service }}
+  when: service_upgrade.stdout == "0"
+  block:
+
+    - name: Create config PV and PVC
+      ansible.builtin.import_role:
+        name: persistent-volume
+      vars:
+        pv_name_label: "{{ ha_service }}"
+        pv_kube_namespace: "{{ ha_kube_namespace }}"
+        pv_host_path: "{{ ha_workdir }}/{{ ha_service }}/config"
+        pv_servicedir: "{{ ha_workdir }}/{{ ha_service }}"
+
+- name: Install {{ ha_service }}
+  ansible.builtin.shell: |
+    helm upgrade --install {{ ha_service }} homelab-charts/{{ ha_service }} --namespace={{ ha_kube_namespace }} \
+    -f {{ ha_workdir }}/{{ ha_service }}/values.yml
+
+- name: Copy traefik ingress
+  ansible.builtin.template:
+    src: templates/traefik_ingress.yml.j2
+    dest: "{{ ha_workdir }}/{{ ha_service }}/traefik_ingress.yml"
+    mode: "0644"
+
+- name: Deploy traefik ingress
+  ansible.builtin.shell: kubectl apply -f "{{ ha_workdir }}/{{ ha_service }}/traefik_ingress.yml"
+
+- name: Wait until {{ ha_service }} is running
+  ansible.builtin.shell: |
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name={{ ha_service }} \
+    --timeout=300s -n {{ ha_kube_namespace }}
+
+- name: Do stuff for HACS
+  when: ha_hacs == true and service_upgrade.stdout == "0"
+  block:
+    - name: Run the HACS script
+      ansible.builtin.shell: cd {{ ha_workdir }}/{{ ha_service }}/config && wget -O - https://get.hacs.xyz | bash -
+
+    - name: Stop {{ ha_service }} to initialize HACS
+      ansible.builtin.shell: helm uninstall -n {{ ha_kube_namespace }} {{ ha_service }}
+
+    - name: Reinstall {{ ha_service }}
+      ansible.builtin.shell: |
+        helm upgrade --install {{ ha_service }} homelab-charts/{{ ha_service }} --namespace={{ ha_kube_namespace }} \
+        -f {{ ha_workdir }}/{{ ha_service }}/values.yml
