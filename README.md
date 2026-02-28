@@ -6,10 +6,10 @@ Services currently supported:
 * traefik
 * sonarr
 * radarr
+* bazarr
 * sabnzbd
 * jellyfin (optionally with Intel or Nvidia transcoding)
-* home assistant (with serial USB passthrough)
-
+* home assistant (with serial USB passthrough and wake on lan support)
 
 ## Prerequisites
 

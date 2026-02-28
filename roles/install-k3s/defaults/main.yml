@@ -23,3 +23,7 @@ ik3s_akri_namespace: "akri"
 ik3s_akri_helm_repo: "https://project-akri.github.io/akri/"
 ik3s_traefik_namespace: "traefik"
 ik3s_loadbalancer_cidr: "198.19.50.200/32"
+ik3s_mtls_test_namespace: "cilium-mtls-role-test"
+ik3s_mtls_test_server_image: "nginx:alpine"
+ik3s_mtls_test_client_image: "curlimages/curl"
+ik3s_mtls_test_cleanup: true

@@ -31,10 +31,29 @@
         --set=ipam.operator.clusterPoolIPv4PodCIDRList="10.42.0.0/16" \
         --set=bpf.masquerade=true \
         --set=kubeProxyReplacement=true \
-        --set=k8sServiceHost=127.0.0.1 \
+        --set=k8sServiceHost={{ ik3s_private_ip }} \
         --set=k8sServicePort=6443 \
         --set=l2announcements.enabled=true \
-        --set=externalIPs.enabled=true
+        --set=externalIPs.enabled=true \
+        --set encryption.enabled=true \
+        --set encryption.type=wireguard \
+        --set authentication.mutual.enabled=true \
+        --set authentication.mutual.spire.enabled=true \
+        --set authentication.mutual.spire.install.server.dataStorage.enabled=true \
+        --set authentication.mutual.spire.install.server.securityContext.runAsUser=1000 \
+        --set authentication.mutual.spire.install.server.securityContext.runAsGroup=1000 \
+        --set authentication.mutual.spire.install.server.securityContext.fsGroup=1000 \
+        --set authentication.mutual.spire.install.server.securityContext.readOnlyRootFilesystem=false \
+        --set authentication.mutual.spire.install.server.initContainers[0].name=set-dir-permissions \
+        --set authentication.mutual.spire.install.server.initContainers[0].image=busybox \
+        --set authentication.mutual.spire.install.server.initContainers[0].command[0]=sh \
+        --set authentication.mutual.spire.install.server.initContainers[0].command[1]=-c \
+        --set authentication.mutual.spire.install.server.initContainers[0].command[2]="chown -R 1000:1000 /var/run/spire-server/sockets" \
+        --set authentication.mutual.spire.install.server.initContainers[0].securityContext.privileged=true \
+        --set authentication.mutual.spire.install.server.initContainers[0].volumeMounts[0].name=spire-server-socket \
+        --set authentication.mutual.spire.install.server.initContainers[0].volumeMounts[0].mountPath=/var/run/spire-server/sockets \
+        --set authentication.mutual.spire.install.agent.hostNetwork=true \
+        --set l7Proxy=true
 
     # - name: Enable cilium loadbalancer
     #   ansible.builtin.shell: |
@@ -47,10 +66,21 @@
     --set=ipam.operator.clusterPoolIPv4PodCIDRList="10.42.0.0/16" \
     --set=bpf.masquerade=true \
     --set=kubeProxyReplacement=true \
-    --set=k8sServiceHost=127.0.0.1 \
+    --set=k8sServiceHost={{ ik3s_private_ip }} \
     --set=k8sServicePort=6443 \
     --set=l2announcements.enabled=true \
-    --set=externalIPs.enabled=true
+    --set=externalIPs.enabled=true \
+    --set encryption.enabled=true \
+    --set encryption.type=wireguard \
+    --set authentication.mutual.enabled=true \
+    --set authentication.mutual.spire.enabled=true \
+    --set authentication.mutual.spire.install.server.dataStorage.enabled=true \
+    --set authentication.mutual.spire.install.server.securityContext.runAsUser=1000 \
+    --set authentication.mutual.spire.install.server.securityContext.runAsGroup=1000 \
+    --set authentication.mutual.spire.install.server.securityContext.fsGroup=1000 \
+    --set authentication.mutual.spire.install.server.securityContext.readOnlyRootFilesystem=false \
+    --set authentication.mutual.spire.install.agent.hostNetwork=true \
+    --set l7Proxy=true
 
 - name: Wait until healthy
   ansible.builtin.shell: cilium status --wait
@@ -73,8 +103,28 @@
 - name: Apply the cilium loadbalancer pool template
   ansible.builtin.shell: kubectl apply -f "{{ ik3s_workdir }}/cilium/cilium-loadbalancer-pool.yml"
 
+# - name: Copy cluster wide mtls template
+#   ansible.builtin.template:
+#     src: templates/cilium-cluster-mtls-networkpolicy.yml.j2
+#     dest: "{{ ik3s_workdir }}/cilium/cilium-cluster-mtls-networkpolicy.yml"
+#     mode: "0644"
+
+# - name: Apply cluster network policy
+#   ansible.builtin.shell: kubectl apply -f "{{ ik3s_workdir }}/cilium/cilium-cluster-mtls-networkpolicy.yml"
+
 # - name: Perform connectivity test
 #   ansible.builtin.shell: cilium connectivity test
 
 - name: Install hubble
-  ansible.builtin.shell: cilium hubble enable --ui
+  ansible.builtin.shell: |
+    HUBBLE_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/hubble/main/stable.txt)
+    HUBBLE_ARCH=amd64
+    if [ "$(uname -m)" = "aarch64" ]; then HUBBLE_ARCH=arm64; fi
+    curl -L --fail --remote-name-all https://github.com/cilium/hubble/releases/download/$HUBBLE_VERSION/hubble-linux-${HUBBLE_ARCH}.tar.gz{,.sha256sum}
+    sha256sum --check hubble-linux-${HUBBLE_ARCH}.tar.gz.sha256sum
+    tar xzvfC hubble-linux-${HUBBLE_ARCH}.tar.gz /usr/local/bin
+    rm hubble-linux-${HUBBLE_ARCH}.tar.gz{,.sha256sum}
+    cilium hubble enable --ui
+
+# - name: Test mTLS
+#   ansible.builtin.include_tasks: test-mtls.yml

@@ -1,0 +1,79 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for {{ bzr_service }}
+- name: Preflight checks
+  block:
+    - name: Check if the homelab-charts helm repo is already installed
+      ansible.builtin.shell: helm repo list | grep -c {{ bzr_helm_repo }} || /bin/true
+      register: helm_repo_installed
+    
+    - name: Fail the playbook if the helm-charts helm repo is not installed
+      ansible.builtin.fail:
+        msg: "The helm-charts helm repo is not installed. Please run the helm-charts role first."
+      when: helm_repo_installed.stdout == "0"
+
+  rescue:
+    - name: Install the helm-charts helm repo
+      ansible.builtin.include_role:
+        name: install-homelab-charts-repo
+
+- name: Create workdir
+  ansible.builtin.shell: mkdir -p "{{ workdir }}/{{ bzr_service }}/config"
+  ignore_errors: true
+
+- name: Update helm repositories
+  ansible.builtin.shell: helm repo update
+
+- name: Copy values.yml template
+  ansible.builtin.template:
+    src: templates/values.yml.j2
+    dest: "{{ workdir }}/{{ bzr_service }}/values.yml"
+    mode: "0644"
+
+- name: Check if we are already running {{ bzr_service }} on this server
+  ansible.builtin.shell: kubectl get pod --namespace={{ bzr_kube_namespace }} | grep {{ bzr_service }} | grep -c Running || /bin/true
+  register: service_upgrade
+
+- name: Install or update {{ bzr_service }}
+  when: service_upgrade.stdout == "0"
+  block:
+
+    - name: Create config PV and PVC
+      ansible.builtin.import_role:
+        name: persistent-volume
+      vars:
+        pv_name_label: "{{ bzr_service }}-config"
+        pv_kube_namespace: "{{ bzr_kube_namespace }}"
+        pv_host_path: "{{ workdir }}/{{ bzr_service }}/config"
+        pv_servicedir: "{{ workdir }}/{{ bzr_service }}"
+
+    - name: Create downloads PVC
+      ansible.builtin.import_role:
+        name: persistent-volume
+      vars:
+        pv_name_label: "{{ bzr_service }}-downloads"
+        pv_kube_namespace: "{{ bzr_kube_namespace }}"
+        pv_host_path: "{{ downloads_dir }}"
+        pv_servicedir: "{{ workdir }}/{{ bzr_service }}"
+
+    - name: Install {{ bzr_service }}
+      ansible.builtin.shell: helm install {{ bzr_service }} homelab-charts/{{ bzr_service }} --namespace={{ bzr_kube_namespace }} --values="{{ workdir }}/{{ bzr_service }}/values.yml"
+
+    - name: Wait until {{ bzr_service }} is running
+      ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name={{ bzr_service }} --timeout=300s -n {{ bzr_kube_namespace }}
+
+- name: Upgrade {{ bzr_service }}
+  when: service_upgrade.stdout == "1"
+  block:
+    - name: Upgrade {{ bzr_service }}
+      ansible.builtin.shell: helm upgrade {{ bzr_service }} homelab-charts/{{ bzr_service }} --namespace={{ bzr_kube_namespace }} --values="{{ workdir }}/{{ bzr_service }}/values.yml"
+      when: service_upgrade.stdout == "1"
+
+- name: Copy traefik ingress
+  ansible.builtin.template:
+    src: templates/traefik_ingress.yml.j2
+    dest: "{{ workdir }}/{{ bzr_service }}/traefik_ingress.yml"
+    mode: "0644"
+
+- name: Deploy traefik ingress
+  ansible.builtin.shell: kubectl apply -f "{{ workdir }}/{{ bzr_service }}/traefik_ingress.yml"

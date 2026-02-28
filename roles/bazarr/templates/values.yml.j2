@@ -1,0 +1,20 @@
+image:
+  tag: "{{ bzr_image_tag }}"
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ bzr_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ bzr_service }}-config
+  - name: {{ bzr_service }}-downloads
+    persistentVolumeClaim:
+      claimName: {{ bzr_service }}-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ bzr_service }}-config
+    mountPath: /config
+    readOnly: false
+  - name: {{ bzr_service }}-downloads
+    mountPath: /downloads
+    readOnly: false

@@ -23,8 +23,8 @@
 
     - role: traefik
       vars:
-        traefik_loglevel: "DEBUG"
-        traefik_domain: "{{ domain }}"
+        trfk_loglevel: "DEBUG"
+        trfk_domain: "{{ domain }}"
       when: traefik
 
     - role: homeassistant
@@ -34,14 +34,6 @@
         ha_udev: "{{ udev }}"
       when: homeassistant
 
-    # - role: persistent-volume
-    #   vars:
-    #     pv_host_path: "{{ downloads_dir }}"
-    #     pv_name_label: "downloads"
-    #     pv_servicedir: "{{ workdir }}"
-    #     pv_pv_only: true
-    #   when: persistent_volume
-
     - role: sabnzbd
       when: sabnzbd
 
@@ -50,6 +42,9 @@
 
     - role: radarr
       when: radarr
+
+    - role: bazarr
+      when: bazarr
 
     - role: jellyfin
       when: jellyfin

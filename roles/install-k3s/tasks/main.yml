@@ -73,7 +73,7 @@
 
     - name: Show selected interface
       ansible.builtin.debug:
-        msg: "Interface selected for flannel is {{ ik3s_selected_interface }}"
+        msg: "Interface selected for k3s is {{ ik3s_selected_interface }}"
       when: ik3s_debug
 
     - name: Install k3s
@@ -164,10 +164,13 @@
   ansible.builtin.blockinfile:
     path: ~/.bashrc
     block: |
-      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-      source <(kubectl completion bash)
-      alias k=kubectl
-      complete -o default -F __start_kubectl k
+      if command -v kubectl >/dev/null 2>&1
+      then
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        source <(kubectl completion bash)
+        alias k=kubectl
+        complete -o default -F __start_kubectl k
+      fi
     marker: "# {mark} ANSIBLE MANAGED BLOCK KUBECTL"
 
 - name: Install helm
