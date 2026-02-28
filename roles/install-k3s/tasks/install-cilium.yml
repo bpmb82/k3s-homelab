@@ -37,22 +37,22 @@
         --set=externalIPs.enabled=true \
         --set encryption.enabled=true \
         --set encryption.type=wireguard \
-        --set authentication.mutual.enabled=true \
-        --set authentication.mutual.spire.enabled=true \
-        --set authentication.mutual.spire.install.server.dataStorage.enabled=true \
-        --set authentication.mutual.spire.install.server.securityContext.runAsUser=1000 \
-        --set authentication.mutual.spire.install.server.securityContext.runAsGroup=1000 \
-        --set authentication.mutual.spire.install.server.securityContext.fsGroup=1000 \
-        --set authentication.mutual.spire.install.server.securityContext.readOnlyRootFilesystem=false \
-        --set authentication.mutual.spire.install.server.initContainers[0].name=set-dir-permissions \
-        --set authentication.mutual.spire.install.server.initContainers[0].image=busybox \
-        --set authentication.mutual.spire.install.server.initContainers[0].command[0]=sh \
-        --set authentication.mutual.spire.install.server.initContainers[0].command[1]=-c \
-        --set authentication.mutual.spire.install.server.initContainers[0].command[2]="chown -R 1000:1000 /var/run/spire-server/sockets" \
-        --set authentication.mutual.spire.install.server.initContainers[0].securityContext.privileged=true \
-        --set authentication.mutual.spire.install.server.initContainers[0].volumeMounts[0].name=spire-server-socket \
-        --set authentication.mutual.spire.install.server.initContainers[0].volumeMounts[0].mountPath=/var/run/spire-server/sockets \
-        --set authentication.mutual.spire.install.agent.hostNetwork=true \
+        # --set authentication.mutual.enabled=true \
+        # --set authentication.mutual.spire.enabled=true \
+        # --set authentication.mutual.spire.install.server.dataStorage.enabled=true \
+        # --set authentication.mutual.spire.install.server.securityContext.runAsUser=1000 \
+        # --set authentication.mutual.spire.install.server.securityContext.runAsGroup=1000 \
+        # --set authentication.mutual.spire.install.server.securityContext.fsGroup=1000 \
+        # --set authentication.mutual.spire.install.server.securityContext.readOnlyRootFilesystem=false \
+        # --set authentication.mutual.spire.install.server.initContainers[0].name=set-dir-permissions \
+        # --set authentication.mutual.spire.install.server.initContainers[0].image=busybox \
+        # --set authentication.mutual.spire.install.server.initContainers[0].command[0]=sh \
+        # --set authentication.mutual.spire.install.server.initContainers[0].command[1]=-c \
+        # --set authentication.mutual.spire.install.server.initContainers[0].command[2]="chown -R 1000:1000 /var/run/spire-server/sockets" \
+        # --set authentication.mutual.spire.install.server.initContainers[0].securityContext.privileged=true \
+        # --set authentication.mutual.spire.install.server.initContainers[0].volumeMounts[0].name=spire-server-socket \
+        # --set authentication.mutual.spire.install.server.initContainers[0].volumeMounts[0].mountPath=/var/run/spire-server/sockets \
+        # --set authentication.mutual.spire.install.agent.hostNetwork=true \
         --set l7Proxy=true
 
     # - name: Enable cilium loadbalancer
@@ -72,14 +72,14 @@
     --set=externalIPs.enabled=true \
     --set encryption.enabled=true \
     --set encryption.type=wireguard \
-    --set authentication.mutual.enabled=true \
-    --set authentication.mutual.spire.enabled=true \
-    --set authentication.mutual.spire.install.server.dataStorage.enabled=true \
-    --set authentication.mutual.spire.install.server.securityContext.runAsUser=1000 \
-    --set authentication.mutual.spire.install.server.securityContext.runAsGroup=1000 \
-    --set authentication.mutual.spire.install.server.securityContext.fsGroup=1000 \
-    --set authentication.mutual.spire.install.server.securityContext.readOnlyRootFilesystem=false \
-    --set authentication.mutual.spire.install.agent.hostNetwork=true \
+    # --set authentication.mutual.enabled=true \
+    # --set authentication.mutual.spire.enabled=true \
+    # --set authentication.mutual.spire.install.server.dataStorage.enabled=true \
+    # --set authentication.mutual.spire.install.server.securityContext.runAsUser=1000 \
+    # --set authentication.mutual.spire.install.server.securityContext.runAsGroup=1000 \
+    # --set authentication.mutual.spire.install.server.securityContext.fsGroup=1000 \
+    # --set authentication.mutual.spire.install.server.securityContext.readOnlyRootFilesystem=false \
+    # --set authentication.mutual.spire.install.agent.hostNetwork=true \
     --set l7Proxy=true
 
 - name: Wait until healthy

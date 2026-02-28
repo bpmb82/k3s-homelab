@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ item.name }}
+  namespace: {{ kps_namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`{{ item.name }}.{{ domain }}`)
+    kind: Rule
+    services:
+      - name: {{ item.service_name }}
+        port: {{ item.port }}
+        scheme: http
+  tls:
+    certResolver: acme_resolver

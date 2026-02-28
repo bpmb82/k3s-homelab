@@ -9,15 +9,15 @@
     - .env.yml
 
   roles:
-    - role: install-k3s
-      vars:
-        ik3s_workdir: "{{ workdir }}"
-        ik3s_nfd_enabled: "{{ nfd_enabled }}"
-        ik3s_nvidia_enabled: "{{ nvidia_enabled }}"
-        ik3s_intel_enabled: "{{ intel_enabled }}"
-        ik3s_akri_enabled: "{{ akri_enabled }}"
-        ik3s_udev: "{{ udev }}"
-        ik3s_loadbalancer_cidr: "{{ loadbalancer_cidr }}"
+    # - role: install-k3s
+    #   vars:
+    #     ik3s_workdir: "{{ workdir }}"
+    #     ik3s_nfd_enabled: "{{ nfd_enabled }}"
+    #     ik3s_nvidia_enabled: "{{ nvidia_enabled }}"
+    #     ik3s_intel_enabled: "{{ intel_enabled }}"
+    #     ik3s_akri_enabled: "{{ akri_enabled }}"
+    #     ik3s_udev: "{{ udev }}"
+    #     ik3s_loadbalancer_cidr: "{{ loadbalancer_cidr }}"
 
     - role: install-homelab-charts-repo
 
@@ -26,6 +26,10 @@
         trfk_loglevel: "DEBUG"
         trfk_domain: "{{ domain }}"
       when: traefik
+
+    - role: kube-prometheus-stack
+      vars:
+        kps_domain: "{{ domain }}"
 
     - role: homeassistant
       vars:
@@ -45,6 +49,9 @@
 
     - role: bazarr
       when: bazarr
+
+    - role: seerr
+      when: seerr
 
     - role: jellyfin
       when: jellyfin

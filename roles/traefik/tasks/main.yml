@@ -4,46 +4,28 @@
   ansible.builtin.shell: mkdir -p "{{ trfk_workdir }}/traefik"
   ignore_errors: true
 
-- name: Check if the Traefik helm repo is already installed
-  ansible.builtin.shell: helm repo list | grep -c traefik || /bin/true
-  register: trfk_repo_installed
-  run_once: true
+- name: Create Traefik k8s namespace
+  kubernetes.core.k8s:
+    name: "{{ trfk_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-- name: Check if the installed Traefik helm repo URL is correct
-  ansible.builtin.shell: helm repo list | grep -c "{{ trfk_helm_repo }}" || /bin/true
-  register: trfk_repo_url
-  when: trfk_repo_installed.stdout == "1"
-  run_once: true
-
-- name: Remove the Traefik helm repo if the URL is incorrect
-  ansible.builtin.shell: helm repo remove traefik
-  when: trfk_repo_installed.stdout == "1" and trfk_repo_url.stdout == "0"
-  register: trfk_repo_removed
-  run_once: true
-
-- name: Add the Traefik helm repo if it is not installed or was removed
-  run_once: true
-  block:
-  - name: Add Traefik helm repo
-    ansible.builtin.shell: helm repo add traefik {{ trfk_helm_repo }}
-
-  - name: Update helm repositories
-    ansible.builtin.shell: helm repo update
-
-  when: trfk_repo_installed.stdout == "0" or trfk_repo_removed is changed
+- name: Add Traefik repository
+  kubernetes.core.helm_repository:
+    name: traefik
+    repo_url: "{{ trfk_helm_repo }}"
+    force_update: true
 
 - name: Install Traefik CRD's
-  ansible.builtin.shell: kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-  run_once: true
+  kubernetes.core.k8s: 
+    state: present
+    src: https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
 
 - name: Install Traefik RBAC
-  ansible.builtin.shell: kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
-  run_once: true
-
-- name: Check if we are already running traefik on this server
-  ansible.builtin.shell: kubectl get pod -n {{ trfk_kube_namespace }} | grep traefik | grep -c Running || /bin/true
-  register: trfk_upgrade
-  run_once: true
+  kubernetes.core.k8s: 
+    state: present
+    src: https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
 
 - name: Copy Traefik values template
   ansible.builtin.template:
@@ -55,35 +37,45 @@
   run_once: true
   block:
 
-  - name: Create the namespace
-    ansible.builtin.shell: kubectl create namespace {{ trfk_kube_namespace }}
-    ignore_errors: true
+  - name: Apply the Traefik secrets
+    kubernetes.core.k8s:
+      state: present
+      definition: "{{ lookup('ansible.builtin.template', 'templates/secrets.yml.j2') | from_yaml }}"
 
-  - name: Copy Traefik secrets file
-    ansible.builtin.template:
-      src: templates/secrets.yml.j2
-      dest: "{{ trfk_workdir }}/traefik/trfk_secrets.yml"
-      mode: "0600"
-
-  - name: Apply the secret
-    ansible.builtin.shell: kubectl apply -f "{{ trfk_workdir }}/traefik/trfk_secrets.yml"
-
-  - name: Remove the secrets file
-    ansible.builtin.file: # This path seems incorrect, it should probably be in the trfk_workdir
-      path: "{{ trfk_workdir }}/traefik/trfk_secrets.yml"
-      state: absent
+  - name: Apply the Traefik API Auth secrets
+    kubernetes.core.k8s:
+      state: present
+      definition: "{{ lookup('ansible.builtin.template', 'templates/api-auth-secret.yml.j2') | from_yaml }}"
 
   when: trfk_dnschallenge
 
-- name: Install traefik
-  ansible.builtin.shell: helm install traefik traefik/traefik --namespace {{ trfk_kube_namespace }} --create-namespace --values={{ trfk_workdir }}/traefik/values_traefik.yml
-  when: trfk_upgrade.stdout | int == 0
-  run_once: true
+- name: Deploy Traefik chart
+  kubernetes.core.helm:
+    name: traefik
+    chart_ref: traefik/traefik
+    release_namespace: "{{ trfk_kube_namespace }}"
+    values: "{{ lookup('ansible.builtin.template', 'values.yml.j2') | from_yaml }}"
+    update_repo_cache: true
+    wait: true
 
-- name: Upgrade traefik
-  ansible.builtin.shell: helm upgrade traefik traefik/traefik --namespace {{ trfk_kube_namespace }} --create-namespace --values={{ trfk_workdir }}/traefik/values_traefik.yml
-  when: trfk_upgrade.stdout | int == 1
-  run_once: true
+- name: Apply the API auth middleware
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/middleware.yml.j2') | from_yaml }}"
 
-- name: Wait for traefik to be running
-  ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=traefik --timeout=300s -n {{ trfk_kube_namespace }}
+- name: Apply the Hubble UI ingressroute
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/hubble-ingressroute.yml.j2') | from_yaml }}"
+
+# - name: Wait for traefik to be running
+#   kubernetes.core.k8s_info:
+#     kind: Pod
+#     wait: true
+#     label_selectors:
+#       - app.kubernetes.io/name=traefik
+#     namespace: "{{ trfk_kube_namespace }}"
+#     wait_timeout: 300
+#     wait_condition:
+#       type: Ready
+#       status: "True"

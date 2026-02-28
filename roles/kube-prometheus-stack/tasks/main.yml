@@ -1,0 +1,36 @@
+---
+# tasks file for kube-prometheus-stack
+- name: Create kps k8s namespace
+  kubernetes.core.k8s:
+    name: "{{ kps_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Add kps repository
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: "{{ kps_helm_repo }}"
+    force_update: true
+
+- name: Deploy kps chart
+  kubernetes.core.helm:
+    name: kps
+    chart_ref: prometheus-community/kube-prometheus-stack
+    release_namespace: "{{ kps_namespace }}"
+    update_repo_cache: true
+    wait: true
+
+- name: Create Traefik ingressroutes
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/ingress.yml.j2') | from_yaml }}"
+  loop:
+    - { name: 'prometheus', service_name: 'kps-kube-prometheus-stack-prometheus', port: 9090 }
+    - { name: 'grafana', service_name: 'kps-grafana', port: 80 }
+
+- name: Show password collection method
+  ansible.builtin.debug:
+    msg: |
+      "The default grafana user is admin, to collect the password, run:
+      kubectl get secret --namespace {{ kps_namespace }} -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo"

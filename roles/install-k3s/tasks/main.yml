@@ -5,7 +5,15 @@
     name: "{{ item }}"
     state: present
     update_cache: true
-  loop: ["curl", "apparmor", "apparmor-utils", "git", "jq"]
+  loop: 
+    - curl
+    - apparmor
+    - apparmor-utils
+    - git
+    - jq
+    - python3-kubernetes
+    - python3-jsonpatch
+    - python3-pyyaml
   when: ansible_facts["os_family"] == "Debian"
 
 - name: Install for RedHat based OS
@@ -33,7 +41,13 @@
         name: "{{ item }}"
         state: present
         update_cache: true
-      loop: ["curl", "git", "jq"]
+      loop: 
+        - curl
+        - git
+        - jq
+        - python3-kubernetes
+        - python3-jsonpatch
+        - python3-pyyaml
 
     - name: Disable firewalld
       ansible.builtin.service:

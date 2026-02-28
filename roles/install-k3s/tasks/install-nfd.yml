@@ -1,48 +1,80 @@
 ---
 # tasks file for nfd
-- name: Check if nfd is already installed
-  ansible.builtin.shell: helm repo list -o json | jq '.[] | select(.name == "{{ ik3s_nfd_helm_repo }}").name'
-  register: ik3s_helm_repo_exists
+- name: Create nfd k8s namespace
+  kubernetes.core.k8s:
+    name: "{{ ik3s_nfd_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-- name: Add nfd helm repository
-  ansible.builtin.shell: helm repo add nfd-helm-charts {{ ik3s_nfd_helm_repo }}
-  when: ik3s_helm_repo_exists.stdout != ik3s_nfd_helm_repo
+- name: Add nfd repository
+  kubernetes.core.helm_repository:
+    name: traefik
+    repo_url: "{{ ik3s_nfd_helm_repo }}"
+    force_update: true
 
-- name: Update helm repositories
-  ansible.builtin.shell: helm repo update
+# - name: Check if nfd is already installed
+#   ansible.builtin.shell: helm repo list -o json | jq '.[] | select(.name == "{{ ik3s_nfd_helm_repo }}").name'
+#   register: ik3s_helm_repo_exists
 
-- name: Check if we are already running nfd on this server
-  ansible.builtin.shell: kubectl get pod --namespace={{ ik3s_nfd_namespace }} | grep nfd | grep -c Running || /bin/true
-  register: ik3s_nfd_running
+# - name: Add nfd helm repository
+#   ansible.builtin.shell: helm repo add nfd-helm-charts {{ ik3s_nfd_helm_repo }}
+#   when: ik3s_helm_repo_exists.stdout != ik3s_nfd_helm_repo
 
-- name: Install nfd
-  when: ik3s_nfd_running.stdout == "0"
-  block:
+# - name: Update helm repositories
+#   ansible.builtin.shell: helm repo update
 
-    - name: Install nfd
-      ansible.builtin.shell: helm install nfd nfd-helm-charts/node-feature-discovery --namespace {{ ik3s_nfd_namespace }} --create-namespace
+# - name: Check if we are already running nfd
+#   kubernetes.core.k8s_info:
+#     api_version: v1
+#     kind: Deployment
+#     name: nfd-node-feature-discovery-master
+#     namespace: "{{ ik3s_nfd_namespace }}"
+#   register: ik3s_nfd_deployment
 
-    - name: Wait for nfd to be ready
-      ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=node-feature-discovery --timeout=300s -n {{ ik3s_nfd_namespace }}
+# - name: debug
+#   ansible.builtin.debug:
+#     var: ik3s_nfd_deployment
 
-- name: Upgrade nfd
-  when: ik3s_nfd_running.stdout == "1"
-  block:
+# - name: Check if we are already running nfd on this server
+#   ansible.builtin.shell: kubectl get pod --namespace={{ ik3s_nfd_namespace }} | grep nfd | grep -c Running || /bin/true
+#   register: ik3s_nfd_running
 
-    - name: Upgrade nfd
-      ansible.builtin.shell: helm upgrade nfd nfd-helm-charts/node-feature-discovery --namespace {{ ik3s_nfd_namespace }}
+# - name: Install nfd
+#   when: ik3s_nfd_running.stdout == "0"
+#   block:
 
-- name: Get node information
-  when: debug
-  block:
+#     - name: Install nfd
+#       ansible.builtin.shell: helm install nfd nfd-helm-charts/node-feature-discovery --namespace {{ ik3s_nfd_namespace }} --create-namespace
 
-    - name: Get simple node information
-      ansible.builtin.shell: kubectl get nodes -o json
-      register: ik3s_node_info
+#     - name: Wait for nfd to be ready
+#       ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=node-feature-discovery --timeout=300s -n {{ ik3s_nfd_namespace }}
 
-    - name: Print node information
-      ansible.builtin.debug:
-        var: ik3s_node_info.stdout
+# - name: Upgrade nfd
+#   when: ik3s_nfd_running.stdout == "1"
+#   block:
+
+#     - name: Upgrade nfd
+#       ansible.builtin.shell: helm upgrade nfd nfd-helm-charts/node-feature-discovery --namespace {{ ik3s_nfd_namespace }}
+
+- name: Deploy nfd chart
+  kubernetes.core.helm:
+    name: nfd
+    chart_ref: nfd-helm-charts/node-feature-discovery
+    release_namespace: "{{ ik3s_nfd_namespace }}"
+    update_repo_cache: true
+
+# - name: Get node information
+#   when: debug
+#   block:
+
+#     - name: Get simple node information
+#       ansible.builtin.shell: kubectl get nodes -o json
+#       register: ik3s_node_info
+
+#     - name: Print node information
+#       ansible.builtin.debug:
+#         var: ik3s_node_info.stdout
 
 - name: Install nvidia plugin
   ansible.builtin.include_tasks: install-nvidia-plugin.yml
