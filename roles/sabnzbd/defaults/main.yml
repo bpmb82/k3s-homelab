@@ -1,8 +1,8 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # defaults file for sabnzbd
-sabnzbd_kube_namespace: "sabnzbd"
-sabnzbd_service: "sabnzbd"
-sabnzbd_service_port: 8080
-sabnzbd_helm_repo: "https://bpmb82.github.io/homelab-charts/"
-sabnzbd_workdir: "/k3s"
+snzb_kube_namespace: "sabnzbd"
+snzb_service: "sabnzbd"
+snzb_service_port: 8080
+snzb_helm_repo: "https://bpmb82.github.io/homelab-charts/"
+snzb_workdir: "/k3s"

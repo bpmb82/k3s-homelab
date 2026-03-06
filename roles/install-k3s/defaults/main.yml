@@ -15,7 +15,7 @@ ik3s_nvidia_namespace: "gpu-operator"
 ik3s_nvidia_gpu_count: 1
 ik3s_nvidia_test: true
 ik3s_intel_enabled: false
-ik3s_intel_release: "v0.34.0"
+ik3s_intel_release: "v0.35.0"
 ik3s_intel_namespace: "intel-gpu-plugin"
 ik3s_intel_gpu_count: 1
 ik3s_akri_enabled: false

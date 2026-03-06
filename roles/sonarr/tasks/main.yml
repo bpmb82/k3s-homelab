@@ -1,79 +1,52 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # tasks file for {{ snr_service }}
-- name: Preflight checks
-  block:
-    - name: Check if the homelab-charts helm repo is already installed
-      ansible.builtin.shell: helm repo list | grep -c {{ snr_helm_repo }} || /bin/true
-      register: helm_repo_installed
-    
-    - name: Fail the playbook if the helm-charts helm repo is not installed
-      ansible.builtin.fail:
-        msg: "The helm-charts helm repo is not installed. Please run the helm-charts role first."
-      when: helm_repo_installed.stdout == "0"
+- name: Create the workdir
+  ansible.builtin.file:
+    path: "{{ workdir }}/{{ snr_service }}/config"
+    state: directory
+    mode: '0755'
 
-  rescue:
-    - name: Install the helm-charts helm repo
-      ansible.builtin.include_role:
-        name: install-homelab-charts-repo
+- name: Create k8s namespace for {{ snr_service }}
+  kubernetes.core.k8s:
+    name: "{{ snr_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-- name: Create workdir
-  ansible.builtin.shell: mkdir -p "{{ workdir }}/{{ snr_service }}/config"
-  ignore_errors: true
+- name: Install the helm-charts helm repo
+  ansible.builtin.include_role:
+    name: install-homelab-charts-repo
 
-- name: Update helm repositories
-  ansible.builtin.shell: helm repo update
+- name: Create config PV and PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ snr_service }}-config"
+    pv_kube_namespace: "{{ snr_kube_namespace }}"
+    pv_host_path: "{{ workdir }}/{{ snr_service }}/config"
+    pv_servicedir: "{{ workdir }}/{{ snr_service }}"
 
-- name: Copy values.yml template
-  ansible.builtin.template:
-    src: templates/values.yml.j2
-    dest: "{{ workdir }}/{{ snr_service }}/values.yml"
-    mode: "0644"
+- name: Create downloads PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ snr_service }}-downloads"
+    pv_kube_namespace: "{{ snr_kube_namespace }}"
+    pv_host_path: "{{ downloads_dir }}"
+    pv_servicedir: "{{ workdir }}/{{ snr_service }}"
 
-- name: Check if we are already running {{ snr_service }} on this server
-  ansible.builtin.shell: kubectl get pod --namespace={{ snr_kube_namespace }} | grep {{ snr_service }} | grep -c Running || /bin/true
-  register: service_upgrade
+- name: Deploy chart for {{ snr_service }}
+  kubernetes.core.helm:
+    name: "{{ snr_service }}"
+    chart_ref: homelab-charts/{{ snr_service }}
+    release_namespace: "{{ snr_kube_namespace }}"
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+    values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
 
-- name: Install or update {{ snr_service }}
-  when: service_upgrade.stdout == "0"
-  block:
-
-    - name: Create config PV and PVC
-      ansible.builtin.import_role:
-        name: persistent-volume
-      vars:
-        pv_name_label: "{{ snr_service }}-config"
-        pv_kube_namespace: "{{ snr_kube_namespace }}"
-        pv_host_path: "{{ workdir }}/{{ snr_service }}/config"
-        pv_servicedir: "{{ workdir }}/{{ snr_service }}"
-
-    - name: Create downloads PVC
-      ansible.builtin.import_role:
-        name: persistent-volume
-      vars:
-        pv_name_label: "{{ snr_service }}-downloads"
-        pv_kube_namespace: "{{ snr_kube_namespace }}"
-        pv_host_path: "{{ downloads_dir }}"
-        pv_servicedir: "{{ workdir }}/{{ snr_service }}"
-
-    - name: Install {{ snr_service }}
-      ansible.builtin.shell: helm install {{ snr_service }} homelab-charts/{{ snr_service }} --namespace={{ snr_kube_namespace }} --values="{{ workdir }}/{{ snr_service }}/values.yml"
-
-    - name: Wait until {{ snr_service }} is running
-      ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name={{ snr_service }} --timeout=300s -n {{ snr_kube_namespace }}
-
-- name: Upgrade {{ snr_service }}
-  when: service_upgrade.stdout == "1"
-  block:
-    - name: Upgrade {{ snr_service }}
-      ansible.builtin.shell: helm upgrade {{ snr_service }} homelab-charts/{{ snr_service }} --namespace={{ snr_kube_namespace }} --values="{{ workdir }}/{{ snr_service }}/values.yml"
-      when: service_upgrade.stdout == "1"
-
-- name: Copy traefik ingress
-  ansible.builtin.template:
-    src: templates/traefik_ingress.yml.j2
-    dest: "{{ workdir }}/{{ snr_service }}/traefik_ingress.yml"
-    mode: "0644"
-
-- name: Deploy traefik ingress
-  ansible.builtin.shell: kubectl apply -f "{{ workdir }}/{{ snr_service }}/traefik_ingress.yml"
+- name: Create Traefik ingressroutes
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik_ingress.yml.j2') | from_yaml }}"

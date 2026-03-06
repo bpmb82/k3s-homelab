@@ -7,165 +7,42 @@
     owner: root
     group: root
 
-- name: Check if nvidia is already installed
-  ansible.builtin.shell: helm repo list | grep -c {{ ik3s_nvidia_helm_repo }} || /bin/true
-  register: ik3s_helm_repo_exists
+- name: Create nvidia namespace
+  kubernetes.core.k8s:
+    name: "{{ ik3s_nvidia_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-- name: Add nvidia helm repository
-  ansible.builtin.shell: helm repo add nvidia {{ ik3s_nvidia_helm_repo }}
-  when: ik3s_helm_repo_exists.stdout == "0"
+- name: Add the nvidia helm repository
+  kubernetes.core.helm_repository:
+    name: "nvidia"
+    repo_url: "{{ ik3s_nvidia_helm_repo }}"
+    force_update: true
 
-- name: Update helm repositories
-  ansible.builtin.shell: helm repo update
+- name: Install nvidia core components
+  kubernetes.core.helm:
+    name: nvidia-gpuoperator
+    chart_ref: nvidia/gpu-operator
+    release_namespace: "{{ ik3s_nvidia_namespace }}"
+    values: "{{ lookup('template', 'nvidia-values.yml.j2') | from_yaml }}"
+    wait: true
+    timeout: "600s"
 
-- name: Check if we are already running nvidia on this server
-  ansible.builtin.shell: kubectl get pod --namespace={{ ik3s_nvidia_namespace }} | grep nvidia | grep -c Running || /bin/true
-  register: ik3s_nvidia_running
+- name: Get information on all the nodes
+  kubernetes.core.k8s_info:
+    kind: Node
+  register: node_info
 
-- name: Install nvidia
-  when: ik3s_nvidia_running.stdout == "0"
-  block:
-
-    - name: Install nvidia if OS is not RHEL
-      ansible.builtin.shell: |
-        helm install --wait nvidia-gpuoperator nvidia/gpu-operator --namespace {{ ik3s_nvidia_namespace }} \
-        --create-namespace --set nfd.enabled=false --set toolkit.env[0].name=CONTAINERD_CONFIG \
-        --set toolkit.env[0].value={{ ik3s_containerd_config }} --set toolkit.env[1].name=CONTAINERD_SOCKET \
-        --set toolkit.env[1].value={{ ik3s_containerd_socket }} --set toolkit.env[2].name=CONTAINERD_RUNTIME_CLASS \
-        --set toolkit.env[2].value=nvidia \
-        --set toolkit.env[3].name=CONTAINERD_SET_AS_DEFAULT \
-        --set-string toolkit.env[3].value=true
-      when: ansible_facts['distribution'] != "RHEL"
-
-    - name: Install nvidia if OS is RHEL
-      ansible.builtin.shell: |
-        helm install --wait nvidia-gpuoperator nvidia/gpu-operator --namespace {{ ik3s_nvidia_namespace }} \
-        --create-namespace --set toolkit.version=v1.16.1-ubi8 --set nfd.enabled=false --set toolkit.env[0].name=CONTAINERD_CONFIG \
-        --set toolkit.env[0].value={{ ik3s_containerd_config }} --set toolkit.env[1].name=CONTAINERD_SOCKET \
-        --set toolkit.env[1].value={{ ik3s_containerd_socket }} --set toolkit.env[2].name=CONTAINERD_RUNTIME_CLASS \
-        --set toolkit.env[2].value=nvidia \
-        --set toolkit.env[3].name=CONTAINERD_SET_AS_DEFAULT \
-        --set-string toolkit.env[3].value=true
-      when: ansible_facts['distribution'] == "RHEL"
-
-- name: Upgrade nvidia
-  when: ik3s_nvidia_running.stdout != "0"
-  block:
-
-    - name: Upgrade nvidia if OS is not RHEL
-      ansible.builtin.shell: |
-        helm upgrade --wait nvidia-gpuoperator nvidia/gpu-operator --namespace {{ ik3s_nvidia_namespace }} \
-        --create-namespace --set nfd.enabled=false --set toolkit.env[0].name=CONTAINERD_CONFIG \
-        --set toolkit.env[0].value={{ ik3s_containerd_config }} --set toolkit.env[1].name=CONTAINERD_SOCKET \
-        --set toolkit.env[1].value={{ ik3s_containerd_socket }} --set toolkit.env[2].name=CONTAINERD_RUNTIME_CLASS \
-        --set toolkit.env[2].value=nvidia \
-        --set toolkit.env[3].name=CONTAINERD_SET_AS_DEFAULT \
-        --set-string toolkit.env[3].value=true
-      when: ansible_facts['distribution'] != "RHEL"
-
-    - name: Upgrade nvidia if OS is RHELs
-      ansible.builtin.shell: |
-        helm upgrade --wait nvidia-gpuoperator nvidia/gpu-operator --namespace {{ ik3s_nvidia_namespace }} \
-        --create-namespace --set toolkit.version=v1.16.1-ubi8 --set nfd.enabled=false --set toolkit.env[0].name=CONTAINERD_CONFIG \
-        --set toolkit.env[0].value={{ ik3s_containerd_config }} --set toolkit.env[1].name=CONTAINERD_SOCKET \
-        --set toolkit.env[1].value={{ ik3s_containerd_socket }} --set toolkit.env[2].name=CONTAINERD_RUNTIME_CLASS \
-        --set toolkit.env[2].value=nvidia \
-        --set toolkit.env[3].name=CONTAINERD_SET_AS_DEFAULT \
-        --set-string toolkit.env[3].value=true
-      when: ansible_facts['distribution'] == "RHEL"
-
-- name: Wait for nvidia to be ready
-  ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=gpu-operator --timeout=300s -n {{ ik3s_nvidia_namespace }}
-
-- name: Wait for nvidia-operator-validator to be ready
-  ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app=nvidia-operator-validator --timeout=300s -n {{ ik3s_nvidia_namespace }}
-
-- name: Wait until the cuda validator is ready
-  ansible.builtin.shell: kubectl wait --for=jsonpath='{status.phase}'=Succeeded pod -l app=nvidia-cuda-validator --timeout=300s -n {{ ik3s_nvidia_namespace}}
-
-- name: Wait until gpu-feature-discovery is ready
-  ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app=gpu-feature-discovery --timeout=300s -n {{ ik3s_nvidia_namespace }}
-
-- name: Wait until we see the mig.capable label with a true or false value
-  ansible.builtin.shell: |
-    kubectl get nodes -o json | jq -r --arg mid "$(cat /etc/machine-id)" '.items[] | select(.status.nodeInfo.machineID == $mid) | .metadata.labels["nvidia.com/mig.capable"]' | grep -Ec 'true|false'
-  register: ik3s_mig_capable_present
-  until: ik3s_mig_capable_present.stdout != "0"
-  retries: 15
-  delay: 20
-
-- name: Block to see if we need to enable MIG
-  when: ik3s_mig_capable_present.stdout != "0"
-  block:
-
-    - name: Check to see if we can support MIG
-      ansible.builtin.shell: |
-        kubectl get nodes -o json | jq -r --arg mid "$(cat /etc/machine-id)" '.items[] | select(.status.nodeInfo.machineID == $mid) | .metadata.labels["nvidia.com/mig.capable"]'
-      register: ik3s_mig_capable
-
-    - name: Debug the MIG capability
-      ansible.builtin.debug:
-        var: ik3s_mig_capable.stdout
-      when: debug
-
-    - name: Set MIG strategy to single
-      ansible.builtin.shell: |
-        kubectl patch clusterpolicies.nvidia.com/cluster-policy --type='json' \
-        -p='[{"op":"replace", "path":"/spec/mig/strategy", "value":"single"}]'
-      when: ik3s_mig_capable.stdout == "true"
-
-    - name: Enable time slicing if non-MIG capable
-      when: ik3s_mig_capable.stdout == "false"
-      block:
-
-        - name: Check if the ConfigMap exists
-          ansible.builtin.shell: kubectl get configmaps -n gpu-operator | grep -c time-slicing-config-all || /bin/true
-          register: ik3s_time_slicing_config_exists
-
-        - name: Create and apply the ConfigMap if it does not exist
-          when: ik3s_time_slicing_config_exists.stdout == "0"
-          block:
-
-            - name: Copy the ConfigMap
-              ansible.builtin.copy:
-                src: files/nvidia-timeslice-configmap.yml
-                dest: "{{ ik3s_workdir }}/nvidia/nvidia-timeslice-configmap.yml"
-                mode: "0644"
-
-            - name: Apply the ConfigMap
-              ansible.builtin.shell: kubectl create -n gpu-operator -f {{ ik3s_workdir }}/nvidia/nvidia-timeslice-configmap.yml
-
-            - name: Configure the device plugin with the config map and set the default time-slicing configuration
-              ansible.builtin.shell: |
-                kubectl patch clusterpolicies.nvidia.com/cluster-policy \
-                -n gpu-operator --type merge \
-                -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config-all", "default": "any"}}}}'
-
-            - name: Wait until we see the nvidia.com/gpu.sharing-strategy label with a 'slicing' value
-              ansible.builtin.shell: |
-                kubectl get nodes -o json | jq -r --arg mid "$(cat /etc/machine-id)" '.items[] | select(.status.nodeInfo.machineID == $mid) | .metadata.labels["nvidia.com/gpu.sharing-strategy"]'
-              register: ik3s_time_slicing_present
-              until: ik3s_time_slicing_present.stdout == "time-slicing"
-              retries: 5
-              delay: 60
+- name: Set MIG or time-slicing capabilities
+  ansible.builtin.include_tasks: nvidia-capabilities.yml
+  loop: "{{ node_info.resources }}"
 
 - name: Start the Nvidia test pod
   when: ik3s_nvidia_test
   block:
 
-    - name: Check if the pod exists
-      ansible.builtin.shell: kubectl get pods -n {{ ik3s_nvidia_namespace }} | grep -c cuda-vectoradd || /bin/true
-      register: ik3s_test_pod_exists
-
-    - name: Create the test pod if it does not exist
-      when: ik3s_test_pod_exists.stdout == "0"
-      block:
-
-        - name: Copy the test pod yaml
-          ansible.builtin.template:
-            src: templates/nvidia-test-pod.yaml.j2
-            dest: "{{ ik3s_workdir }}/nvidia/nvidia-test-pod.yaml"
-            mode: "0644"
-
-        - name: Create the test pod
-          ansible.builtin.shell: kubectl apply -f {{ ik3s_workdir }}/nvidia/nvidia-test-pod.yaml
+    - name: Deploy the Nvidia test pod
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/nvidia-test-pod.yml.j2') | from_yaml }}"

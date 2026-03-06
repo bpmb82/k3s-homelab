@@ -5,7 +5,7 @@
     name: "{{ item }}"
     state: present
     update_cache: true
-  loop: 
+  loop:
     - curl
     - apparmor
     - apparmor-utils
@@ -60,6 +60,14 @@
   ansible.builtin.shell: kubectl version -o json | jq '.serverVersion.gitVersion' || /bin/true
   register: ik3s_version
 
+- name: Install helm
+  ansible.builtin.shell: curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+- name: Install Helm diff plugin
+  kubernetes.core.helm_plugin:
+    plugin_path: https://github.com/databus23/helm-diff
+    state: present
+
 - name: Install k3s when single_host
   when: ik3s_single_host and ik3s_version.stdout != ik3s_k3s_version
   block:
@@ -67,14 +75,6 @@
     - name: Save the private IP of this instance
       ansible.builtin.set_fact:
         ik3s_private_ip: "{{ ansible_facts['all_ipv4_addresses'] | select('match', '^' ~ node_ip_range) | first}}"
-
-    # - name: Find interface with private IP we just found
-    #   ansible.builtin.set_fact:
-    #     ik3s_selected_interface: "{{ item }}"
-    #   loop: "{{ ansible_facts['interfaces'] }}"
-    #   when: >
-    #     ('ipv4' in ansible_facts[item]) and
-    #     (ansible_facts[item]['ipv4']['address'] == ik3s_private_ip)
 
     - name: Find interface with private IP we just found
       ansible.builtin.set_fact:
@@ -129,12 +129,12 @@
           ansible.builtin.set_fact:
             ik3s_k3s_token: "{{ lookup('community.general.random_string', length=32, special=false) }}"
 
-        - name: Install cilium cni
-          ansible.builtin.include_tasks: install-cilium.yml
-
         - name: Install k3s and initialize the cluster
           ansible.builtin.shell: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ ik3s_k3s_version }} K3S_TOKEN={{ ik3s_k3s_token }} sh -s - server --advertise-address={{ ik3s_private_ip }} --write-kubeconfig-mode 600 --cluster-init --tls-san={{ ik3s_private_ip }} --disable=traefik --node-ip={{ ik3s_private_ip }} --flannel-backend=none --disable-network-policy --disable servicelb
           when: ik3s_version.stdout != ik3s_k3s_version
+
+        - name: Install cilium cni
+          ansible.builtin.include_tasks: install-cilium.yml
 
     - name: Join the other instances to the cluster
       when: ik3s_hostname_shell.stdout != inventory_hostname
@@ -187,31 +187,19 @@
       fi
     marker: "# {mark} ANSIBLE MANAGED BLOCK KUBECTL"
 
-- name: Install helm
-  ansible.builtin.shell: curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+# - name: Check if kubectl works
+#   ansible.builtin.shell: kubectl version -o json | grep -c clientVersion || /bin/true # noqa: command-instead-of-module
 
-- name: Check if kubectl works
-  ansible.builtin.shell: kubectl version -o json | grep -c clientVersion || /bin/true # noqa: command-instead-of-module
+# - name: Wait for the kube-system namespace to become available
+#   ansible.builtin.shell: kubectl get pods --namespace kube-system --no-headers | wc -l # noqa: command-instead-of-module
+#   register: ik3s_kube_system_pods
+#   until: ik3s_kube_system_pods.rc == 0 and ik3s_kube_system_pods.stdout | int > 0
+#   retries: 10
+#   delay: 10
+#   ignore_errors: true
 
-- name: Wait for the kube-system namespace to become available
-  ansible.builtin.shell: kubectl get pods --namespace kube-system --no-headers | wc -l # noqa: command-instead-of-module
-  register: ik3s_kube_system_pods
-  until: ik3s_kube_system_pods.rc == 0 and ik3s_kube_system_pods.stdout | int > 0
-  retries: 10
-  delay: 10
-  ignore_errors: true
-
-- name: Wait for all the pods to become available so we know kube-system is fully initialized
-  ansible.builtin.shell: kubectl wait --for=condition=Ready pod --all --namespace=kube-system --timeout=300s
-
-- name: Check if helm works
-  ansible.builtin.shell: helm version --short
-  register: ik3s_helm_version
-
-- name: Show information on installation
-  ansible.builtin.debug:
-    msg: "Installed k3s version {{ ik3s_k3s_version }} and helm version {{ ik3s_helm_version.stdout }}"
-  when: ik3s_debug
+# - name: Wait for all the pods to become available so we know kube-system is fully initialized
+#   ansible.builtin.shell: kubectl wait --for=condition=Ready pod --all --namespace=kube-system --timeout=300s
 
 - name: Install nfd if enabled
   ansible.builtin.include_tasks: install-nfd.yml

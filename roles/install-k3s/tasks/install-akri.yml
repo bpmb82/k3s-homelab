@@ -7,36 +7,35 @@
     owner: root
     group: root
 
-- name: Check if akri is already installed
-  ansible.builtin.shell: helm repo list | grep -c {{ ik3s_akri_helm_repo }} || /bin/true
-  register: ik3s_helm_repo_exists
+- name: Create akri namespace
+  kubernetes.core.k8s:
+    name: "{{ ik3s_akri_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-- name: Add akri helm repository
-  ansible.builtin.shell: helm repo add akri-helm-charts {{ ik3s_akri_helm_repo }}
-  when: ik3s_helm_repo_exists.stdout == "0"
-
-- name: Check if we are already running akri on this server
-  ansible.builtin.shell: kubectl get pod --namespace={{ ik3s_akri_namespace }} | grep akri | grep -c Running || /bin/true
-  register: ik3s_akri_running
-
-- name: Copy the values file
-  ansible.builtin.template:
-    src: templates/akri-udev.yml.j2
-    dest: "{{ ik3s_workdir }}/akri/akri-udev-{{ item.name }}.yml"
-    mode: '0644'
-  loop: "{{ ik3s_udev }}"
+- name: Add the akri helm repository
+  kubernetes.core.helm_repository:
+    name: "akri"
+    repo_url: "{{ ik3s_akri_helm_repo }}"
+    force_update: true
 
 - name: Install akri core components
-  ansible.builtin.shell: |
-    helm upgrade --install akri akri-helm-charts/akri \
-      --set agent.brokerPod.image.repository=registry.k8s.io/pause \
-      --set udev.discovery.enabled=true \
-      --namespace {{ ik3s_akri_namespace }} --create-namespace
+  kubernetes.core.helm:
+    name: akri
+    chart_ref: akri/akri
+    release_namespace: "{{ ik3s_akri_namespace }}"
+    values: "{{ lookup('template', 'akri-values.yml.j2') | from_yaml }}"
+    wait: true
+    timeout: "600s"
 
-- name: Wait until all the akri pods are running
-  ansible.builtin.shell: kubectl wait --for=condition=Ready pod --all --namespace={{ ik3s_akri_namespace }} --timeout=300s
-
-- name: Apply the configurations
-  ansible.builtin.shell: |
-    kubectl apply -f {{ ik3s_workdir }}/akri/akri-udev-{{ item.name }}.yml
+- name: Render the udev values files
+  ansible.builtin.set_fact:
+    akri_manifests: "{{ akri_manifests | default([]) + [lookup('template', 'templates/akri-udev.yml.j2') | from_yaml] }}"
   loop: "{{ ik3s_udev }}"
+
+- name: Apply the akri manifests
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ akri_manifests }}"

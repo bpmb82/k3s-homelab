@@ -1,6 +1,8 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # defaults file for kube-prometheus-stack
-kps_namespace: "kps"
+kps_namespace: "monitoring"
 kps_helm_repo: "https://prometheus-community.github.io/helm-charts"
 kps_domain: "example.com"
+kps_grafana_user: "admin"
+kps_grafana_password: "admin"

@@ -1,0 +1,71 @@
+ipam:
+  operator:
+    clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
+
+{% if ik3s_single_host %}
+operator:
+  replicas: 1
+{% endif %}
+
+lbIPAM:
+  enabled: true
+
+l2announcements:
+  enabled: true
+
+bpf:
+  masquerade: true
+kubeProxyReplacement: true
+k8sServiceHost: {{ ik3s_private_ip }}
+k8sServicePort: 6443
+l2announcements:
+  enabled: true
+externalIPs:
+  enabled: true
+encryption:
+  enabled: true
+  type: wireguard
+l7Proxy: true
+
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - icmp
+      - http
+
+{% if mtls | default(false) %}
+authentication:
+  mutual:
+    enabled: true
+    spire:
+      enabled: true
+      install:
+        server:
+          dataStorage:
+            enabled: true
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            readOnlyRootFilesystem: false
+          initContainers:
+            - name: set-dir-permissions
+              image: busybox
+              command: ["sh", "-c", "chown -R 1000:1000 /var/run/spire-server/sockets"]
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - name: spire-server-socket
+                  mountPath: /var/run/spire-server/sockets
+        agent:
+          hostNetwork: true
+{% endif %}

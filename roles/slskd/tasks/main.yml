@@ -1,81 +1,52 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # tasks file for {{ slskd_service }}
-- name: Preflight checks
-  block:
-    - name: Check if the homelab-charts helm repo is already installed
-      ansible.builtin.shell: helm repo list | grep -c {{ slskd_helm_repo }} || /bin/true
-      register: helm_repo_installed
+- name: Create the workdir
+  ansible.builtin.file:
+    path: "{{ workdir }}/{{ slskd_service }}/config"
+    state: directory
+    mode: '0755'
 
-    - name: Fail the playbook if the helm-charts helm repo is not installed
-      ansible.builtin.fail:
-        msg: "The helm-charts helm repo is not installed. Please run the helm-charts role first."
-      when: helm_repo_installed.stdout == "0"
+- name: Create k8s namespace for {{ slskd_service }}
+  kubernetes.core.k8s:
+    name: "{{ slskd_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-  rescue:
-    - name: Install the helm-charts helm repo
-      ansible.builtin.include_role:
-        name: install-homelab-charts-repo
+- name: Install the helm-charts helm repo
+  ansible.builtin.include_role:
+    name: install-homelab-charts-repo
 
-- name: Create workdir
-  ansible.builtin.shell: mkdir -p "{{ workdir }}/{{ slskd_service }}/config"
-  ignore_errors: true
+- name: Create config PV and PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ slskd_service }}-config"
+    pv_kube_namespace: "{{ slskd_kube_namespace }}"
+    pv_host_path: "{{ workdir }}/{{ slskd_service }}/config"
+    pv_servicedir: "{{ workdir }}/{{ slskd_service }}"
 
-- name: Copy values.yml template
-  ansible.builtin.template:
-    src: templates/values.yml.j2
-    dest: "{{ workdir }}/{{ slskd_service }}/values.yml"
-    mode: "0644"
+- name: Create downloads PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ slskd_service }}-downloads"
+    pv_kube_namespace: "{{ slskd_kube_namespace }}"
+    pv_host_path: "{{ downloads_dir }}"
+    pv_servicedir: "{{ workdir }}/{{ slskd_service }}"
 
-- name: Update helm repositories
-  ansible.builtin.shell: helm repo update
+- name: Deploy chart for {{ slskd_service }}
+  kubernetes.core.helm:
+    name: "{{ slskd_service }}"
+    chart_ref: homelab-charts/{{ slskd_service }}
+    release_namespace: "{{ slskd_kube_namespace }}"
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+    values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
 
-- name: Check if we are already running {{ slskd_service }} on this server
-  ansible.builtin.shell: kubectl get pod --namespace={{ slskd_kube_namespace }} | grep {{ slskd_service }} | grep -c Running || /bin/true
-  register: service_upgrade
-
-- name: Install or update {{ slskd_service }}
-  when: service_upgrade.stdout == "0"
-  block:
-
-    - name: Create config PV and PVC
-      ansible.builtin.import_role:
-        name: persistent-volume
-      vars:
-        pv_name_label: "{{ slskd_service }}-config"
-        pv_kube_namespace: "{{ slskd_kube_namespace }}"
-        pv_host_path: "{{ workdir }}/{{ slskd_service }}/config"
-        pv_servicedir: "{{ workdir }}/{{ slskd_service }}"
-
-    - name: Create downloads PVC
-      ansible.builtin.import_role:
-        name: persistent-volume
-      vars:
-        pv_name_label: "{{ slskd_service }}-downloads"
-        pv_kube_namespace: "{{ slskd_kube_namespace }}"
-        pv_host_path: "{{ downloads_dir }}"
-        pv_servicedir: "{{ workdir }}/{{ slskd_service }}"
-
-    - name: Install {{ slskd_service }}
-      ansible.builtin.shell: |
-        helm install {{ slskd_service }} homelab-charts/{{ slskd_service }} --namespace={{ slskd_kube_namespace }} --values="{{ workdir }}/{{ slskd_service }}/values.yml"
-
-    - name: Wait until {{ slskd_service }} is running
-      ansible.builtin.shell: kubectl wait --for=condition=ready pod -l app.kubernetes.io/name={{ slskd_service }} --timeout=300s -n {{ slskd_kube_namespace }}
-
-- name: Upgrade {{ slskd_service }}
-  when: service_upgrade.stdout == "1"
-  block:
-    - name: Upgrade {{ slskd_service }}
-      ansible.builtin.shell: |
-        helm upgrade {{ slskd_service }} homelab-charts/{{ slskd_service }} --namespace={{ slskd_kube_namespace }} --values="{{ workdir }}/{{ slskd_service }}/values.yml"
-      when: service_upgrade.stdout == "1"
-
-- name: Copy traefik ingress
-  ansible.builtin.template:
-    src: templates/traefik_ingress.yml.j2
-    dest: "{{ workdir }}/{{ slskd_service }}/traefik_ingress.yml"
-    mode: "0644"
-
-- name: Deploy traefik ingress
-  ansible.builtin.shell: kubectl apply -f "{{ workdir }}/{{ slskd_service }}/traefik_ingress.yml"
+- name: Create Traefik ingressroutes
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik_ingress.yml.j2') | from_yaml }}"

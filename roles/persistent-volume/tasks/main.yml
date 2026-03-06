@@ -6,11 +6,12 @@
     path: "{{ pv_host_path }}"
     state: directory
     recurse: true
-    mode: "0755"
+    mode: '0755'
 
 - name: Get and set volume size if not predefined, we take the whole disk size
   when: pv_volume_size is undefined
   block:
+
     - name: Get the size of the volume we will create
       ansible.builtin.shell: echo $(df --block-size=G --output=size {{ pv_host_path }} | tail -n 1)i
       register: pv_capacity
@@ -20,31 +21,24 @@
         pv_volume_size: "{{ pv_capacity.stdout }}"
 
 - name: Create the namespace if it doesn't exist yet
-  ansible.builtin.shell: kubectl create namespace {{ pv_kube_namespace }}
-  ignore_errors: true
-
-- name: Copy the config file
-  ansible.builtin.template:
-    src: templates/persistentvolume.yml.j2
-    dest: "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolume.yml"
-    mode: "0644"
-  when: pv_pvc_only == false
-
-- name: Copy the persistent volume claim config
-  ansible.builtin.template:
-    src: templates/persistentvolumeclaim.yml.j2
-    dest: "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolumeclaim.yml"
-    mode: "0644"
-  when: pv_pv_only == false
+  kubernetes.core.k8s:
+    name: "{{ pv_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
 - name: Deploy the config files we just created
   when: pv_deploy
   block:
 
     - name: Apply the PV
-      ansible.builtin.shell: kubectl apply -f "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolume.yml"
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/persistentvolume.yml.j2') | from_yaml }}"
       when: pv_pvc_only == false
 
     - name: Apply the PVC
-      ansible.builtin.shell: kubectl apply -f "{{ pv_servicedir }}/{{ pv_name_label }}-persistentvolumeclaim.yml"
-      when: pv_pv_only == false
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/persistentvolumeclaim.yml.j2') | from_yaml }}"
+

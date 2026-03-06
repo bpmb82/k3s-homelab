@@ -6,6 +6,12 @@ deployment:
 service:
   enabled: true
 
+{% if trfk_external_hosts %}
+providers:
+  kubernetesCRD:
+    allowExternalNameServices: true
+{% endif %}
+
 ingressRoute:
   dashboard:
     enabled: true

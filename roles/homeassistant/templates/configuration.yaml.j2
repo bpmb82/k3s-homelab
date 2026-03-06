@@ -12,7 +12,7 @@ scene: !include scenes.yaml
 http:
   use_x_forwarded_for: true
   trusted_proxies:
-    - 10.42.0.0/16
+    - {{ node_list.resources[0].spec.podCIDR }}
     - 127.0.0.1
 
 {% if ha_wakeonlan %}
