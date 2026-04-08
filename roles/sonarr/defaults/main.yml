@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for sonarr
+snr_kube_namespace: "sonarr"
+snr_service: "sonarr"
+snr_service_port: 8989
+snr_helm_repo: "https://bpmb82.github.io/homelab-charts/"

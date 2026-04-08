@@ -1,0 +1,52 @@
+environment:
+  - name: PUID
+    value: "1000"
+  - name: PGID
+    value: "1000"
+  - name: TZ
+    value: "UTC"
+  - name: HC_BASEPATH
+    value: "/config"
+  - name: HC_IGNORE_SSL
+    value: "True"
+
+replicaCount: 1
+strategy:
+  type: Recreate
+
+podSecurityContext:
+  runAsNonRoot: false
+#   runAsUser: 1000
+#   runAsGroup: 1000
+#   fsGroup: 1000
+
+terminationGracePeriodSeconds: 60
+
+securityContext:
+  privileged: false
+  allowPrivilegeEscalation: true
+  readOnlyRootFilesystem: false
+  capabilities:
+    add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    drop:
+      - ALL
+
+{% if ha_akri_enabled %}
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 15"]
+
+resources:
+  limits:
+{%   for device in ha_udev %}
+    akri.sh/akri-{{ device.name }}: 1
+{%   endfor %}
+  requests:
+{%   for device in ha_udev %}
+    akri.sh/akri-{{ device.name }}: 1
+{%   endfor %}
+{% endif %}

@@ -1,0 +1,9 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for homeassistant
+ha_kube_namespace: "homeassistant"
+ha_service: "homeassistant"
+ha_service_port: 8123
+ha_helm_repo: "https://bpmb82.github.io/homelab-charts/"
+ha_akri_enabled: false
+ha_hacs: true

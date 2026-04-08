@@ -1,0 +1,10 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for persistent-volume
+pv_kube_namespace: "default"
+pv_name_label: "media"
+pv_host_path: "/mnt/media"
+pv_deploy: true
+pv_debug: false
+pv_pv_only: false
+pv_pvc_only: false

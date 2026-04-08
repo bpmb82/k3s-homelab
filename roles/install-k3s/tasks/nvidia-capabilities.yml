@@ -1,0 +1,44 @@
+---
+- name: Check MIG or time-slicing capabilities and set when GPU is present
+  when: item.metadata.labels["nvidia.com/gpu.present"] == "true" and nvidia_patch is not defined
+  block:
+
+    - name: Set MIG strategy to single
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: nvidia.com/v1
+          kind: ClusterPolicy
+          metadata:
+            name: cluster-policy
+          spec:
+            mig:
+              strategy: single
+        state: patched
+      when: item.metadata.labels['nvidia.com/mig.capable'] | lower == "true"
+
+    - name: Enable time slicing if non-MIG capable
+      when: item.metadata.labels['nvidia.com/mig.capable'] | lower == "false"
+      block:
+
+        - name: Apply or update the time-slicing ConfigMap
+          kubernetes.core.k8s:
+            state: present
+            definition: "{{ lookup('ansible.builtin.template', 'templates/nvidia-timeslice-configmap.yml') | from_yaml }}"
+
+        - name: Configure devicePlugin and set default time-slicing config
+          kubernetes.core.k8s:
+            definition:
+              apiVersion: nvidia.com/v1
+              kind: ClusterPolicy
+              metadata:
+                name: cluster-policy
+              spec:
+                devicePlugin:
+                  config:
+                    name: time-slicing-config-all
+                    default: any
+            state: patched
+
+    - name: Set fact so we now the cluster was patched already
+      ansible.builtin.set_fact:
+        nvidia_patch: true

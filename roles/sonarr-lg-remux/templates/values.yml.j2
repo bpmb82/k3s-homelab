@@ -1,0 +1,19 @@
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: sonarr-config
+    persistentVolumeClaim:
+      claimName: sonarr-config
+  - name: sonarr-downloads
+    persistentVolumeClaim:
+      claimName: sonarr-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: sonarr-config
+    mountPath: /config
+    readOnly: false
+  - name: sonarr-downloads
+    mountPath: /downloads
+    readOnly: false
+
+

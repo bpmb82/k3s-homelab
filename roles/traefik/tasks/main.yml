@@ -1,0 +1,93 @@
+---
+# tasks file for k3s-traefik
+- name: Create workdir
+  ansible.builtin.shell: mkdir -p "{{ trfk_workdir }}/traefik"
+  ignore_errors: true
+
+- name: Create Traefik k8s namespace
+  kubernetes.core.k8s:
+    name: "{{ trfk_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Add Traefik repository
+  kubernetes.core.helm_repository:
+    name: traefik
+    repo_url: "{{ trfk_helm_repo }}"
+    force_update: true
+
+- name: Install Traefik CRD's
+  kubernetes.core.k8s: 
+    state: present
+    src: https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+
+- name: Install Traefik RBAC
+  kubernetes.core.k8s: 
+    state: present
+    src: https://raw.githubusercontent.com/traefik/traefik/{{ trfk_version }}/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+
+- name: Copy Traefik values template
+  ansible.builtin.template:
+    src: templates/values.yml.j2
+    dest: "{{ trfk_workdir }}/traefik/values_traefik.yml"
+    mode: "0644"
+
+- name: Traefik secrets if letsencrypt is enabled
+  run_once: true
+  block:
+
+  - name: Apply the Traefik secrets
+    kubernetes.core.k8s:
+      state: present
+      definition: "{{ lookup('ansible.builtin.template', 'templates/secrets.yml.j2') | from_yaml }}"
+
+  - name: Apply the Traefik API Auth secrets
+    kubernetes.core.k8s:
+      state: present
+      definition: "{{ lookup('ansible.builtin.template', 'templates/api-auth-secret.yml.j2') | from_yaml }}"
+
+  when: trfk_dnschallenge
+
+- name: Deploy Traefik chart
+  kubernetes.core.helm:
+    name: traefik
+    chart_ref: traefik/traefik
+    release_namespace: "{{ trfk_kube_namespace }}"
+    values: "{{ lookup('ansible.builtin.template', 'values.yml.j2') | from_yaml }}"
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+
+- name: Apply the API auth middleware
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/middleware.yml.j2') | from_yaml }}"
+
+- name: Apply the Hubble UI ingressroute
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/hubble-ingressroute.yml.j2') | from_yaml }}"
+
+- name: Deploy services and ingressroutes for external hosts if they exist
+  when: trfk_external_hosts is defined
+  block:
+
+    - name: Deploy external services
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/external-hosts.yml.j2') | from_yaml }}"
+      loop: "{{ trfk_external_hosts }}"
+
+    - name: Deploy server transport protocol to skip verify the service
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/external-hosts-skip-verify.yml.j2') | from_yaml }}"
+      when: item.skipverify
+      loop: "{{ trfk_external_hosts }}"
+
+    - name: Deploy external service ingressroutes
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/external-hosts-ingressroute.yml.j2') | from_yaml }}"
+      loop: "{{ trfk_external_hosts }}"

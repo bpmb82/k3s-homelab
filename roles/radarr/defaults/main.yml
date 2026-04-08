@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for radarr
+rdr_kube_namespace: "radarr"
+rdr_service: "radarr"
+rdr_service_port: 7878
+rdr_helm_repo: "https://bpmb82.github.io/homelab-charts/"

@@ -1,0 +1,75 @@
+grafana:
+  admin:
+    existingSecret: "grafana-user"
+    userKey: admin-user
+    passwordKey: admin-password
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki:3100
+      isDefault: false
+      access: proxy
+      jsonData:
+        maxLines: 1000
+
+kubeProxy:
+  enabled: false
+
+kubeControllerManager:
+  enabled: true
+  endpoints: 
+    - {{ ansible_facts['all_ipv4_addresses'] | select('match', '^' ~ node_ip_range) | first}}
+  service:
+    enabled: true
+    port: 10257
+    targetPort: 10257
+  serviceMonitor:
+    https: true
+    insecureSkipVerify: true
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+kubeScheduler:
+  enabled: true
+  endpoints: 
+    - {{ ansible_facts['all_ipv4_addresses'] | select('match', '^' ~ node_ip_range) | first}}
+  service:
+    enabled: true
+    port: 10259
+    targetPort: 10259
+  serviceMonitor:
+    https: true
+    insecureSkipVerify: true
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+alertmanager:
+{% if discord_url is defined %}
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'discord-notifications'
+      routes:
+        - receiver: 'discord-notifications'
+          match_re:
+            severity: critical|warning
+    receivers:
+      - name: 'discord-notifications'
+        discord_configs:
+          - webhook_url: "{{ discord_url }}"
+            send_resolved: true
+{% raw %}
+            title: '{{ template "discord.default.title" . }}'
+            message: '{{ template "discord.default.content" . }}'
+{% endraw %}
+{% endif %}
+  alertmanagerSpec:
+    alertmanagerConfigSelector:
+      matchLabels:
+        release: kps
+    replicas: 1
+    alertmanagerConfigMatcherStrategy:
+      type: None

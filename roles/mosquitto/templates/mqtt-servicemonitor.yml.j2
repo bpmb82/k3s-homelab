@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ msqt_service }}-metrics
+  namespace: {{ msqt_kube_namespace }}
+  labels:
+    release: kps
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ msqt_service }}
+  namespaceSelector:
+    matchNames:
+      - {{ msqt_kube_namespace }}
+  endpoints:
+    - port: metrics
+      path: /
+      interval: 30s

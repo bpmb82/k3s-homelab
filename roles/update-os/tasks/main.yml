@@ -1,0 +1,20 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for update-os
+- name: Update OS packages to latest for RedHat based systems
+  when: ansible_facts['os_family'] == "RedHat"
+  block:
+    - name: Upgrade all packages using dnf
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+
+- name: Update OS packages to latest for Debian based systems
+  when: ansible_facts['os_family'] == "Debian"
+  block:
+    - name: Upgrade all packages using apt
+      ansible.builtin.apt:
+        name: "*"
+        state: latest
+        update_cache: true

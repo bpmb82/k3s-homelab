@@ -1,0 +1,71 @@
+---
+- name: Install k3s and helm, deploy traefik and then any other enabled services
+  hosts: localhost
+  gather_facts: true
+  become: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  vars_files:
+    - .env.yml
+
+  roles:
+    # - role: cockpit
+    #   when: cockpit
+    - role: install-k3s
+      vars:
+        ik3s_workdir: "{{ workdir }}"
+        ik3s_nfd_enabled: "{{ nfd_enabled }}"
+        ik3s_nvidia_enabled: "{{ nvidia_enabled }}"
+        ik3s_intel_enabled: "{{ intel_enabled }}"
+        ik3s_akri_enabled: "{{ akri_enabled }}"
+        ik3s_udev: "{{ udev }}"
+        ik3s_loadbalancer_cidr: "{{ loadbalancer_cidr }}"
+
+    - role: install-homelab-charts-repo
+
+    - role: traefik
+      vars:
+        trfk_loglevel: "INFO"
+        trfk_domain: "{{ domain }}"
+      when: traefik
+
+    - role: kube-prometheus-stack
+      vars:
+        kps_domain: "{{ domain }}"
+        kps_grafana_user: "{{ grafana_user }}"
+        kps_grafana_password: "{{ grafana_password }}"
+
+    - role: mosquitto
+      when: mosquitto
+
+    - role: sabnzbd
+      when: sabnzbd
+
+    - role: sonarr
+      when: sonarr
+
+    - role: sonarr-lg-remux
+      when: sonarr_lg_remux
+
+    - role: radarr
+      when: radarr
+
+    - role: bazarr
+      when: bazarr
+
+    - role: seerr
+      when: seerr
+
+    - role: jellyfin
+      when: jellyfin
+
+    - role: slskd
+      when: slskd
+
+    - role: homeassistant
+      vars:
+        ha_workdir: "{{ workdir }}"
+        ha_akri_enabled: "{{ akri_enabled }}"
+        ha_udev: "{{ udev }}"
+        ha_extra_config: "{{ extra_config }}"
+      when: homeassistant

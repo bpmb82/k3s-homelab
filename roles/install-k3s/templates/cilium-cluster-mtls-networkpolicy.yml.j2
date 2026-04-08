@@ -1,0 +1,21 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: "default-mtls-with-infra-exception"
+spec:
+  description: "Force mTLS for all pods, except for SPIRE and Cilium"
+  endpointSelector:
+    matchExpressions:
+      - key: "io.kubernetes.pod.namespace"
+        operator: NotIn
+        values:
+          - kube-system
+          - cilium-spire
+  ingress:
+  - fromEndpoints:
+    - {}
+    authentication:
+      mode: "required"
+  egress:
+  - toEndpoints:
+    - {}

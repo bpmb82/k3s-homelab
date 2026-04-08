@@ -1,0 +1,11 @@
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ srr_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ srr_service }}-config
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ srr_service }}-config
+    mountPath: /app/config
+    readOnly: false

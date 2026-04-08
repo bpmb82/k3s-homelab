@@ -1,0 +1,48 @@
+---
+- name: Create a workdir for nvidia
+  ansible.builtin.file:
+    path: "{{ ik3s_workdir }}/nvidia"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create nvidia namespace
+  kubernetes.core.k8s:
+    name: "{{ ik3s_nvidia_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Add the nvidia helm repository
+  kubernetes.core.helm_repository:
+    name: "nvidia"
+    repo_url: "{{ ik3s_nvidia_helm_repo }}"
+    force_update: true
+
+- name: Install nvidia core components
+  kubernetes.core.helm:
+    name: nvidia-gpuoperator
+    chart_ref: nvidia/gpu-operator
+    release_namespace: "{{ ik3s_nvidia_namespace }}"
+    values: "{{ lookup('template', 'nvidia-values.yml.j2') | from_yaml }}"
+    wait: true
+    timeout: "600s"
+
+- name: Get information on all the nodes
+  kubernetes.core.k8s_info:
+    kind: Node
+  register: node_info
+
+- name: Set MIG or time-slicing capabilities
+  ansible.builtin.include_tasks: nvidia-capabilities.yml
+  loop: "{{ node_info.resources }}"
+
+- name: Start the Nvidia test pod
+  when: ik3s_nvidia_test
+  block:
+
+    - name: Deploy the Nvidia test pod
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/nvidia-test-pod.yml.j2') | from_yaml }}"

@@ -1,0 +1,15 @@
+---
+# defaults file for k3s-traefik
+trfk_kube_namespace: "traefik"
+trfk_workdir: "/k3s"
+trfk_helm_repo: "https://traefik.github.io/charts"
+trfk_version: "v3.6.11"
+trfk_loglevel: "INFO"
+trfk_loadbalancer: falses
+trfk_dnschallenge: true
+trfk_websecure: true
+trfk_headsecure: true
+trfk_trusted_ips: ""
+trfk_acme_provider: "cloudflare"
+trfk_acme_email: "someone@example.com"
+monitoring_namespace: "monitoring"

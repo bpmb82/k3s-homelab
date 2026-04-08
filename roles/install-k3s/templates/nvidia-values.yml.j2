@@ -1,0 +1,16 @@
+nfd:
+  enabled: false
+
+toolkit:
+  env:
+    - name: CONTAINERD_CONFIG
+      value: "{{ ik3s_containerd_config }}"
+    - name: CONTAINERD_SOCKET
+      value: "{{ ik3s_containerd_socket }}"
+    - name: CONTAINERD_RUNTIME_CLASS
+      value: "nvidia"
+    - name: CONTAINERD_SET_AS_DEFAULT
+      value: "true"
+{% if ansible_facts['distribution'] == "RHEL" %}
+  version: "v1.16.1-ubi8"
+{% endif %}

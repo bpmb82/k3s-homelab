@@ -1,0 +1,125 @@
+---
+- name: Install Prometheus Operator CRDs (required for Cilium ServiceMonitor)
+  kubernetes.core.k8s:
+    src: https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+    state: present
+    wait: yes
+
+- name: Optimize netwerkstack for Cilium L2 Announcements on Fedora
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: yes
+  loop:
+    - { key: "net.ipv4.conf.all.rp_filter", value: "2" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.rp_filter", value: "2" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.proxy_arp", value: "1" }
+    - { key: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.send_redirects", value: "0" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.arp_announce", value: "2" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.arp_ignore", value: "1" }
+    - { key: "net.ipv4.ip_forward", value: "1" }
+
+- name: Check if cilium is already installed and running
+  ansible.builtin.shell: cilium version | grep -c cilium-cli || /bin/true
+  register: cilium_install
+
+- name: Create the cilium config folder
+  ansible.builtin.file:
+    path: "{{ ik3s_workdir }}/cilium"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Continue if cilium is not installed
+  when: cilium_install.stdout == "0"
+  block:
+
+    - name: Run cilium install script
+      ansible.builtin.shell: |
+        CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
+        CLI_ARCH=amd64
+        if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
+        curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+        sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
+        tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
+        rm -f cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+
+- name: Add or update the cilium helm repo
+  kubernetes.core.helm_repository:
+    name: cilium
+    repo_url: "https://helm.cilium.io/"
+    force_update: true
+
+- name: Install or upgrade Cilium
+  kubernetes.core.helm:
+    name: cilium
+    chart_ref: cilium/cilium
+    release_namespace: kube-system
+    values: "{{ lookup('template', 'cilium-values.yml.j2') | from_yaml }}"
+    wait: true
+    timeout: "600s"
+
+- name: Wait until Cilium DaemonSet is fully up-to-date
+  kubernetes.core.k8s_info:
+    kind: DaemonSet
+    name: cilium
+    namespace: kube-system
+  register: cilium_ds
+  until:
+    - cilium_ds.resources is defined
+    - cilium_ds.resources | length > 0
+    - cilium_ds.resources[0].status.numberReady == cilium_ds.resources[0].status.desiredNumberScheduled
+  retries: 50
+  delay: 10
+
+- name: Wait Cilium L2 CRD is available
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: ciliuml2announcementpolicies.cilium.io
+  register: crd_check
+  until: crd_check.resources | length > 0
+  retries: 10
+  delay: 5
+
+- name: Apply cilium L2 policy
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/cilium-l2-policy.yml.j2') | from_yaml }}"
+
+- name: Apply cilium loadbalancer template
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/cilium-loadbalancer-pool.yml.j2') | from_yaml }}"
+
+- name: Wait until healthy
+  ansible.builtin.shell: cilium status --wait
+
+# - name: Copy cluster wide mtls template
+#   ansible.builtin.template:
+#     src: templates/cilium-cluster-mtls-networkpolicy.yml.j2
+#     dest: "{{ ik3s_workdir }}/cilium/cilium-cluster-mtls-networkpolicy.yml"
+#     mode: "0644"
+
+# - name: Apply cluster network policy
+#   ansible.builtin.shell: kubectl apply -f "{{ ik3s_workdir }}/cilium/cilium-cluster-mtls-networkpolicy.yml"
+
+# - name: Perform connectivity test
+#   ansible.builtin.shell: cilium connectivity test
+
+# - name: Install hubble
+#   ansible.builtin.shell: |
+#     HUBBLE_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/hubble/main/stable.txt)
+#     HUBBLE_ARCH=amd64
+#     if [ "$(uname -m)" = "aarch64" ]; then HUBBLE_ARCH=arm64; fi
+#     curl -L --fail --remote-name-all https://github.com/cilium/hubble/releases/download/$HUBBLE_VERSION/hubble-linux-${HUBBLE_ARCH}.tar.gz{,.sha256sum}
+#     sha256sum --check hubble-linux-${HUBBLE_ARCH}.tar.gz.sha256sum
+#     tar xzvfC hubble-linux-${HUBBLE_ARCH}.tar.gz /usr/local/bin
+#     rm hubble-linux-${HUBBLE_ARCH}.tar.gz{,.sha256sum}
+#     cilium hubble enable --ui
+
+# - name: Test mTLS
+#   ansible.builtin.include_tasks: test-mtls.yml

@@ -1,0 +1,41 @@
+---
+- name: Create a workdir for akri
+  ansible.builtin.file:
+    path: "{{ ik3s_workdir }}/akri"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create akri namespace
+  kubernetes.core.k8s:
+    name: "{{ ik3s_akri_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Add the akri helm repository
+  kubernetes.core.helm_repository:
+    name: "akri"
+    repo_url: "{{ ik3s_akri_helm_repo }}"
+    force_update: true
+
+- name: Install akri core components
+  kubernetes.core.helm:
+    name: akri
+    chart_ref: akri/akri
+    release_namespace: "{{ ik3s_akri_namespace }}"
+    values: "{{ lookup('template', 'akri-values.yml.j2') | from_yaml }}"
+    wait: true
+    timeout: "600s"
+
+- name: Render the udev values files
+  ansible.builtin.set_fact:
+    akri_manifests: "{{ akri_manifests | default([]) + [lookup('template', 'templates/akri-udev.yml.j2') | from_yaml] }}"
+  loop: "{{ ik3s_udev }}"
+
+- name: Apply the akri manifests
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop: "{{ akri_manifests }}"

@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: {{ msqt_service }}
+  namespace: {{ msqt_kube_namespace }}
+spec:
+  entryPoints:
+    - mqtt
+  routes:
+  - match: HostSNI(`{{ msqt_service }}.{{ domain }}`)
+    services:
+      - name: {{ msqt_service }}
+        port: {{ msqt_service_port }}
+  tls:
+    passthrough: false
+    certResolver: acme_resolver

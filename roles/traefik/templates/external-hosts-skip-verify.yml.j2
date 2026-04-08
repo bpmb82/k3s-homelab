@@ -1,0 +1,7 @@
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: external-skipverify
+  namespace: {{ trfk_kube_namespace }}
+spec:
+  insecureSkipVerify: true

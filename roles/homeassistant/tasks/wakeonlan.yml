@@ -1,0 +1,36 @@
+---
+- name: Install wakeonlan on the host if OS is Debian based
+  ansible.builtin.apt: 
+    name: 
+     - coreutils
+     - wakeonlan
+    state: latest
+    update_cache: true
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Install ether-wake on the host if OS is RedHat based
+  ansible.builtin.dnf: 
+    name: 
+      - net-tools
+      - coreutils
+    state: latest
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Remove named pipe if it exists
+  ansible.builtin.shell: rm -f {{ ha_workdir }}/{{ ha_service }}/config/wolpipe
+  ignore_errors: true
+
+- name: Create the named pipe
+  ansible.builtin.shell: mkfifo {{ ha_workdir }}/{{ ha_service }}/config/wolpipe
+
+- name: Make sure it has the correct permissions
+  ansible.builtin.shell: chmod 644 {{ ha_workdir }}/{{ ha_service }}/config/wolpipe
+
+- name: Copy over systemd service
+  ansible.builtin.template:
+    src: templates/ha-wol.service.j2
+    dest: /etc/systemd/system/ha-wol.service
+    mode: 0644 
+
+- name: Start ha-wol daemon
+  ansible.builtin.service: name=ha-wol state=started enabled=true

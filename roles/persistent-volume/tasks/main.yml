@@ -1,0 +1,43 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for persistent-volume
+- name: Make sure the host path exists
+  ansible.builtin.file:
+    path: "{{ pv_host_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Get and set volume size if not predefined, we take the whole disk size
+  when: pv_volume_size is undefined
+  block:
+
+    - name: Get the size of the volume we will create
+      ansible.builtin.shell: echo $(df --block-size=G --output=size {{ pv_host_path }} | tail -n 1)i
+      register: pv_capacity
+
+    - name: Set the size of the volume we will create
+      ansible.builtin.set_fact:
+        pv_volume_size: "{{ pv_capacity.stdout }}"
+
+- name: Create the namespace if it doesn't exist yet
+  kubernetes.core.k8s:
+    name: "{{ pv_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Deploy the config files we just created
+  when: pv_deploy
+  block:
+
+    - name: Apply the PV
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/persistentvolume.yml.j2') | from_yaml }}"
+      when: pv_pvc_only == false
+
+    - name: Apply the PVC
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/persistentvolumeclaim.yml.j2') | from_yaml }}"
+

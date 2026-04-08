@@ -1,0 +1,29 @@
+---
+# defaults file for install-k3s
+ik3s_single_host: true
+ik3s_debug: true
+ik3s_k3s_version: "v1.34.1+k3s1"
+ik3s_containerd_config: "/var/lib/rancher/k3s/agent/etc/containerd/config.toml"
+ik3s_containerd_socket: "/run/k3s/containerd/containerd.sock"
+ik3s_workdir: "/k3s"
+ik3s_nfd_enabled: false
+ik3s_nfd_namespace: "node-feature-discovery"
+ik3s_nfd_helm_repo: "https://kubernetes-sigs.github.io/node-feature-discovery/charts"
+ik3s_nvidia_enabled: false
+ik3s_nvidia_helm_repo: "https://helm.ngc.nvidia.com/nvidia"
+ik3s_nvidia_namespace: "gpu-operator"
+ik3s_nvidia_gpu_count: 1
+ik3s_nvidia_test: true
+ik3s_intel_enabled: false
+ik3s_intel_release: "v0.35.0"
+ik3s_intel_namespace: "intel-gpu-plugin"
+ik3s_intel_gpu_count: 1
+ik3s_akri_enabled: false
+ik3s_akri_namespace: "akri"
+ik3s_akri_helm_repo: "https://project-akri.github.io/akri/"
+ik3s_traefik_namespace: "traefik"
+ik3s_loadbalancer_cidr: "198.19.50.200/32"
+ik3s_mtls_test_namespace: "cilium-mtls-role-test"
+ik3s_mtls_test_server_image: "nginx:alpine"
+ik3s_mtls_test_client_image: "curlimages/curl"
+ik3s_mtls_test_cleanup: true

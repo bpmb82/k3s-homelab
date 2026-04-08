@@ -1,0 +1,12 @@
+[Unit]
+Description=Listen for wake-on-lan from kubernetes via pipe
+
+[Service]
+Restart=always
+{% if ansible_facts['os_family'] == 'Debian' %}
+ExecStart=/usr/bin/wakeonlan -f {{ ha_workdir }}/{{ ha_service }}/config/wolpipe
+{% elif ansible_facts['os_family'] == 'RedHat' %}
+ExecStart=bash -c "ether-wake $$(<{{ ha_workdir }}/{{ ha_service }}/config/wolpipe)"
+{% endif %}
+[Install]
+WantedBy=multi-user.target

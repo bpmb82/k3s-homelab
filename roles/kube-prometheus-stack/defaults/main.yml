@@ -1,0 +1,22 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for kube-prometheus-stack
+debug: false
+kps_namespace: "monitoring"
+kps_helm_repo: "https://prometheus-community.github.io/helm-charts"
+kps_domain: "example.com"
+kps_grafana_user: "admin"
+kps_grafana_password: "admin"
+grafana_dashboards:
+  - name: "cilium"
+    id: "21431"
+    tags: "cilium, networking"
+  - name: "loki"
+    id: "15141"
+    tags: "loki, logs, visibility"
+  - name: "traefik"
+    id: "17347"
+    tags: "traefik, infrastructure, networking"
+  - name: "mosquitto"
+    id: "22739"
+    tags: "mosquitto, MQTT"

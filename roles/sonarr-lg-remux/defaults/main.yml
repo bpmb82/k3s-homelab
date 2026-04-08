@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for sonarr-lg-remux
+slr_kube_namespace: "sonarr"
+slr_service: "lgremux"
+slr_service_port: 8000
+slr_helm_repo: "https://bpmb82.github.io/homelab-charts/"

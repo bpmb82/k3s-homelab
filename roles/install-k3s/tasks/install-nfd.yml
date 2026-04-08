@@ -1,0 +1,33 @@
+---
+# tasks file for nfd
+- name: Create nfd k8s namespace
+  kubernetes.core.k8s:
+    name: "{{ ik3s_nfd_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Add nfd repository
+  kubernetes.core.helm_repository:
+    name: nfd-helm-charts
+    repo_url: "{{ ik3s_nfd_helm_repo }}"
+    force_update: true
+
+- name: Deploy nfd chart
+  kubernetes.core.helm:
+    name: nfd
+    chart_ref: nfd-helm-charts/node-feature-discovery
+    release_namespace: "{{ ik3s_nfd_namespace }}"
+    update_repo_cache: true
+
+- name: Install nvidia plugin
+  ansible.builtin.include_tasks: install-nvidia-plugin.yml
+  when: ik3s_nvidia_enabled
+
+- name: Install the Intel plugin
+  ansible.builtin.include_tasks: install-intel-plugin.yml
+  when: ik3s_intel_enabled
+
+- name: Install akri
+  ansible.builtin.include_tasks: install-akri.yml
+  when: ik3s_akri_enabled

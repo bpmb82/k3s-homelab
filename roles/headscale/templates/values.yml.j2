@@ -1,0 +1,25 @@
+image:
+  tag: "{{ hdscl_image_tag }}"
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ hdscl_service }}-etc
+    persistentVolumeClaim:
+      claimName: {{ hdscl_service }}-etc
+  - name: {{ hdscl_service }}-lib
+    persistentVolumeClaim:
+      claimName: {{ hdscl_service }}-lib
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ hdscl_service }}-etc
+    mountPath: /etc/headscale
+    readOnly: false
+  - name: {{ hdscl_service }}-lib
+    mountPath: /var/lib/headscale
+    readOnly: false
+
+sidecar:
+  port: "{{ hdscl_sidecar_service_port }}"
+  image:
+    tag: "{{ hdscl_sidecar_image_tag }}"

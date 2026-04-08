@@ -1,0 +1,60 @@
+---
+- name: Create the namespace {{ ik3s_intel_namespace }}
+  kubernetes.core.k8s:
+    name: "{{ ik3s_intel_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Build Intel GPU manifests via Kustomize
+  ansible.builtin.shell:
+    cmd: "kubectl kustomize https://github.com/intel/intel-device-plugins-for-kubernetes/deployments/nfd/overlays/node-feature-rules?ref={{ ik3s_intel_release }}"
+  register: intel_gpu_manifest
+  changed_when: false
+
+- name: Apply Intel GPU NodeFeatureRules
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ intel_gpu_manifest.stdout | from_yaml_all }}"
+    namespace: "{{ ik3s_intel_namespace }}"
+
+- name: Build Intel GPU daemonset via Kustomize
+  ansible.builtin.shell:
+    cmd: "kubectl kustomize https://github.com/intel/intel-device-plugins-for-kubernetes/deployments/gpu_plugin/overlays/nfd_labeled_nodes?ref={{ ik3s_intel_release }}"
+  register: intel_gpu_daemonset
+  changed_when: false
+
+- name: Create Intel GPU plugin daemonset with Monitoring and Sharing
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ ik3s_intel_namespace }}"
+    definition: |
+      {% set docs = intel_gpu_daemonset.stdout | from_yaml_all | list %}
+      {% for doc in docs %}
+      {%   if doc.kind == 'DaemonSet' and doc.metadata.name == 'intel-gpu-plugin' %}
+      {%     set args = doc.spec.template.spec.containers[0].args %}
+      {%     if '-enable-monitoring' not in args %}
+      {%       set _ = args.append('-enable-monitoring') %}
+      {%     endif %}
+      {%     set shared_arg = "-shared-dev-num=" ~ (ik3s_intel_shared_dev_num | default(1)) %}
+      {%     set _ = args.append(shared_arg) %}
+      {%   endif %}
+      {% endfor %}
+      {{ docs }}
+    wait: true
+
+- name: Add xvilo helm repo
+  kubernetes.core.helm_repository:
+    name: xvilo
+    repo_url: "https://xvilo.github.io/helm-charts"
+
+- name: Install Intel GPU Exporter
+  kubernetes.core.helm:
+    name: intel-gpu-exporter
+    chart_ref: xvilo/intel-gpu-exporter
+    release_namespace: "{{ ik3s_intel_namespace }}"
+    values:
+      serviceMonitor:
+        enabled: true
+        labels:
+          release: kps

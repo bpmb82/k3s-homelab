@@ -1,0 +1,17 @@
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ rdr_service }}-config
+    persistentVolumeClaim:
+      claimName: {{ rdr_service }}-config
+  - name: {{ rdr_service }}-downloads
+    persistentVolumeClaim:
+      claimName: {{ rdr_service }}-downloads
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: {{ rdr_service }}-config
+    mountPath: /config
+    readOnly: false
+  - name: {{ rdr_service }}-downloads
+    mountPath: /downloads
+    readOnly: false

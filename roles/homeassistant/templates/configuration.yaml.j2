@@ -1,0 +1,31 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - {{ node_list.resources[0].spec.podCIDR }}
+    - 127.0.0.1
+
+{% if ha_wakeonlan %}
+shell_command:
+{%   for device in ha_wakeonlan %}
+  wol_{{ device }}: "/bin/echo '{{ ha_wakeonlan[device].mac }}' > /config/wolpipe"
+{%   endfor %}
+{% endif %}
+
+{% if ha_extra_config is defined %}
+{{ ha_extra_config }}
+{% endif %}
+
+prometheus:
+  namespace: {{ ha_kube_namespace }}
+  requires_auth: false

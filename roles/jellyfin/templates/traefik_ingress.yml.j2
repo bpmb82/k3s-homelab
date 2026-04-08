@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ jf_service }}
+  namespace: {{ jf_kube_namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`{{ jf_service }}.{{ domain }}`)
+    kind: Rule
+    services:
+      - name: {{ jf_service }}
+        port: {{ jf_service_port }}
+        scheme: http
+  tls:
+    certResolver: acme_resolver

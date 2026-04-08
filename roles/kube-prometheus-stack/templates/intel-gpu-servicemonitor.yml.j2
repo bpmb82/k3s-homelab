@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: intel-gpu-exporter
+  namespace: {{ kps_namespace }}
+  labels:
+    release: kps
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: intel-gpu-exporter
+  namespaceSelector:
+    matchNames:
+      - intel-gpu-plugin
+  endpoints:
+    - port: http
+      path: /
+      interval: 10s
