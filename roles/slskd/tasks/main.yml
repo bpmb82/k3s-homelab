@@ -24,7 +24,7 @@
   vars:
     pv_name_label: "{{ slskd_service }}-config"
     pv_kube_namespace: "{{ slskd_kube_namespace }}"
-    pv_host_path: "{{ workdir }}/{{ slskd_service }}/config"
+    pv_host_path: "{{ workdir }}/{{ slskd_service }}/app"
     pv_servicedir: "{{ workdir }}/{{ slskd_service }}"
 
 - name: Create downloads PVC

@@ -1,0 +1,97 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for {{ hdscl_service }}
+- name: Create the workdir
+  ansible.builtin.file:
+    path: "{{ workdir }}/{{ hdscl_service }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - config
+    - lib
+
+- name: Create k8s namespace for {{ hdscl_service }}
+  kubernetes.core.k8s:
+    name: "{{ hdscl_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Install the helm-charts helm repo
+  ansible.builtin.include_role:
+    name: install-homelab-charts-repo
+
+- name: Deploy cloudflared
+  block:
+
+    - name: Create cloudflared secrets
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/cloudflare-secret.yml.j2') | from_yaml }}"
+
+    - name: Deploy cloudflared
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/cloudflare-deployment.yml.j2') | from_yaml }}"
+
+- name: Create config PV and PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ hdscl_service }}-etc"
+    pv_kube_namespace: "{{ hdscl_kube_namespace }}"
+    pv_host_path: "{{ workdir }}/{{ hdscl_service }}/config"
+    pv_servicedir: "{{ workdir }}/{{ hdscl_service }}"
+
+- name: Create lib PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ hdscl_service }}-lib"
+    pv_kube_namespace: "{{ hdscl_kube_namespace }}"
+    pv_host_path: "{{ workdir }}/{{ hdscl_service }}/lib"
+    pv_servicedir: "{{ workdir }}/{{ hdscl_service }}"
+
+- name: Deploy chart for {{ hdscl_service }}
+  kubernetes.core.helm:
+    name: "{{ hdscl_service }}"
+    chart_ref: homelab-charts/{{ hdscl_service }}
+    release_namespace: "{{ hdscl_kube_namespace }}"
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+    values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
+
+- name: Deploy the api key secret
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/api_secret.yml.j2') | from_yaml }}"
+
+- name: Deploy the cors traefik middleware
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik_middleware_headscale.yml.j2') | from_yaml }}"
+
+- name: Create Traefik ingressroute for headscale using 'headsecure' entrypoint
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik_ingress_headscale.yml.j2') | from_yaml }}"
+
+- name: Create Traefik ingressroute for headplane using 'websecure' entrypoint
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik_ingress_headplane.yml.j2') | from_yaml }}"
+
+
+
+# - name: Create the headscale API token
+#   kubernetes.core.k8s_exec:
+#     namespace: "{{ hdscl_kube_namespace }}"
+#     pod: "{{ headscale }}"
+#     command: headscale apikey create
+#   register: headscale_apikey
+
+# - name: Show headscale api output
+#   ansible.builtin.debug:
+#     var: headscale_apikey
+#   when: hdscl_debug

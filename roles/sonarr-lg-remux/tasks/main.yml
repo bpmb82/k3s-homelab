@@ -1,0 +1,48 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for {{ slr_service }}
+- name: Create k8s namespace for {{ slr_service }}
+  kubernetes.core.k8s:
+    name: "{{ slr_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Install the helm-charts helm repo
+  ansible.builtin.include_role:
+    name: install-homelab-charts-repo
+
+- name: Auto API attempt (get from node disk)
+  block:
+
+    - name: Get sonarr api key from disk
+      community.general.xml:
+        path: "{{ workdir }}/sonarr/config/config.xml"
+        xpath: /Config/ApiKey
+        content: text
+      register: xml_output
+
+    - name: Success message                                             
+      ansible.builtin.debug:
+        msg: "Successfully collected Sonarr API key!"
+
+  rescue:
+
+    - name: Fail message
+      ansible.builtin.debug:
+        msg: "Failed to auto-collect Sonarr API key!"
+
+- name: Deploy the API secret collected
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/sonarr_secret.yml.j2') | from_yaml }}"
+
+- name: Deploy chart for {{ slr_service }}
+  kubernetes.core.helm:
+    name: "{{ slr_service }}"
+    chart_ref: homelab-charts/{{ slr_service }}
+    release_namespace: "{{ slr_kube_namespace }}"
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+    values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"

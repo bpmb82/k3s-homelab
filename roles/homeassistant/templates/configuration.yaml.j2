@@ -21,3 +21,11 @@ shell_command:
   wol_{{ device }}: "/bin/echo '{{ ha_wakeonlan[device].mac }}' > /config/wolpipe"
 {%   endfor %}
 {% endif %}
+
+{% if ha_extra_config is defined %}
+{{ ha_extra_config }}
+{% endif %}
+
+prometheus:
+  namespace: {{ ha_kube_namespace }}
+  requires_auth: false

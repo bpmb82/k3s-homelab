@@ -1,4 +1,26 @@
 ---
+- name: Install Prometheus Operator CRDs (required for Cilium ServiceMonitor)
+  kubernetes.core.k8s:
+    src: https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+    state: present
+    wait: yes
+
+- name: Optimize netwerkstack for Cilium L2 Announcements on Fedora
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: yes
+  loop:
+    - { key: "net.ipv4.conf.all.rp_filter", value: "2" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.rp_filter", value: "2" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.proxy_arp", value: "1" }
+    - { key: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.send_redirects", value: "0" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.arp_announce", value: "2" }
+    - { key: "net.ipv4.conf.{{ ik3s_selected_interface }}.arp_ignore", value: "1" }
+    - { key: "net.ipv4.ip_forward", value: "1" }
+
 - name: Check if cilium is already installed and running
   ansible.builtin.shell: cilium version | grep -c cilium-cli || /bin/true
   register: cilium_install

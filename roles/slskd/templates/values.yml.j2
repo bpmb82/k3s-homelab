@@ -10,7 +10,7 @@ volumes:
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts:
   - name: {{ slskd_service }}-config
-    mountPath: /config
+    mountPath: /app
     readOnly: false
   - name: {{ slskd_service }}-downloads
     mountPath: /downloads

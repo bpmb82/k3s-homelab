@@ -3,7 +3,12 @@ kind: CiliumL2AnnouncementPolicy
 metadata:
   name: "l2-policy"
 spec:
+  serviceSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  nodeSelector:
+    matchLabels: {}
   interfaces:
-    - {{ ik3s_selected_interface }}
+    - "^{{ ik3s_selected_interface }}$"
   externalIPs: true
   loadBalancerIPs: true

@@ -60,6 +60,11 @@
     timeout: "600s"
     values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
 
+- name: Deploy prometheus ServiceMonitor
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/prometheus-servicemonitor.yml.j2') | from_yaml }}"
+
 - name: Create Traefik ingressroutes
   kubernetes.core.k8s:
     state: present
@@ -71,7 +76,7 @@
     - name: Run the HACS script
       ansible.builtin.shell: cd {{ ha_workdir }}/{{ ha_service }}/config && wget -O - https://get.hacs.xyz | bash -
 
-    - name: Trigger a restart of the Sabnzbd deployment
+    - name: Trigger a restart of the Homeassistants deployment
       kubernetes.core.k8s:
         definition:
           apiVersion: apps/v1

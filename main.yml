@@ -1,0 +1,58 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for garage
+
+- name: Create the workdir
+  ansible.builtin.file:
+    path: "{{ workdir }}/garage"
+    state: directory
+    mode: '0755'
+
+- name: Create k8s namespace for garage
+  kubernetes.core.k8s:
+    name: garage
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Add Garage Helm repo
+  kubernetes.core.helm_repository:
+    name: garage
+    repo_url: https://helm.garage61.net
+
+- name: Create PV and PVC for Garage data
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "garage-data"
+    pv_kube_namespace: "garage"
+    pv_host_path: "{{ workdir }}/garage"
+    pv_servicedir: "{{ workdir }}/garage"
+    # Garage verwacht vaak specifieke mounting, we mounten de root folder
+    # en laten garage subfolders (meta/data) daarin beheren.
+
+- name: Deploy chart for Garage
+  kubernetes.core.helm:
+    name: garage
+    chart_ref: garage/garage
+    release_namespace: garage
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+    values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
+
+- name: Create Traefik ingressroutes
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/ingress.yml.j2') | from_yaml }}"
+
+- name: Wait for Garage to be ready
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: garage
+    label_selectors:
+      - app.kubernetes.io/name=garage
+  register: garage_pods
+  until: garage_pods.resources | length > 0 and garage_pods.resources[0].status.phase == 'Running'
+  retries: 10
+  delay: 10

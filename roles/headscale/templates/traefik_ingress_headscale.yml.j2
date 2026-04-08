@@ -1,0 +1,19 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ hdscl_service }}
+  namespace: {{ hdscl_kube_namespace }}
+spec:
+  entryPoints:
+    - headsecure
+  routes:
+  - match: Host(`{{ hdscl_service_public_endpoint }}.{{ domain }}`)
+    kind: Rule
+    services:
+      - name: {{ hdscl_service }}
+        port: {{ hdscl_service_port }}
+        scheme: http
+    middlewares:
+      - name: cors
+  tls:
+    certResolver: acme_resolver

@@ -12,6 +12,31 @@
     state: present
     definition: "{{ lookup('ansible.builtin.template', 'templates/grafana-user-secret.yml.j2') | from_yaml }}"
 
+- name: Add grafana repository
+  kubernetes.core.helm_repository:
+    name: grafana
+    repo_url: https://grafana.github.io/helm-charts
+    force_update: true
+
+- name: Install grafana loki stack
+  kubernetes.core.helm:
+    name: loki
+    chart_ref: grafana/loki-stack
+    release_namespace: "{{ kps_namespace }}"
+    update_repo_cache: true
+    wait: true
+    values:
+      loki:
+        enabled: true
+      promtail:
+        enabled: true
+      grafana:
+        sidecar:
+          datasources:
+            enabled: false
+        datasource:
+          isDefault: false
+
 - name: Add kps repository
   kubernetes.core.helm_repository:
     name: prometheus-community
@@ -26,6 +51,79 @@
     update_repo_cache: true
     wait: true
     values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
+
+- name: Download grafana dashboards
+  ansible.builtin.uri:
+    url: https://grafana.com/api/dashboards/{{ item.id }}/revisions/latest/download
+    return_content: true
+  register: grafana_dashboards_json
+  loop: "{{ grafana_dashboards }}"
+
+- name: Inspecteer Dashboard Transformatie
+  ansible.builtin.debug:
+    msg:
+      dashboard_name: "{{ item.item.name | lower | replace(' ', '-') }}"
+      transformed_json: >-
+        {{
+          (item.content | from_json)
+          | combine({'tags': (item.item.tags.split(',') | map('trim') | list)}, recursive=True)
+          | to_json
+          | replace('${DS_LOKI}', 'Loki')
+          | replace('${DS_PROMETHEUS}', 'prometheus')
+        }}
+  loop: "{{ grafana_dashboards_json.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Create ConfigMap for Grafana Dashboards
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: "{{ item.item.name | lower | replace(' ', '-') }}-dashboard"
+        namespace: "{{ kps_namespace }}"
+        labels:
+          grafana_dashboard: "1"
+      data: "{{ { (item.item.name | lower | replace(' ', '-') + '.json'): (
+            (item.content | from_json)
+            | combine({'tags': (item.item.tags.split(',') | map('trim') | list)}, recursive=True)
+            | to_json
+            | replace('${DS_LOKI}', 'Loki')
+            | replace('${DS_PROMETHEUS}', 'prometheus')
+          ) } }}"
+  loop: "{{ grafana_dashboards_json.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Deploy Traefik ServiceMonitor
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik-servicemonitor.yml.j2') | from_yaml }}"
+
+- name: Deploy Grafana stuff for Intel GPU
+  when: intel_enabled
+  block:
+
+    - name: Deploy Intel GPU Exporter ServiceMonitor
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/intel-gpu-servicemonitor.yml.j2') | from_yaml }}"
+    
+    - name: Create ConfigMap for Intel GPU Dashboards
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "intel-gpu-dashboard"
+            namespace: "{{ kps_namespace }}"
+            labels:
+              grafana_dashboard: "1"
+          data:
+            intel-gpu-dashboard.json: "{{ lookup('ansible.builtin.file', 'files/intel-gpu-dashboard.json') }}"
 
 - name: Create Traefik ingressroutes
   kubernetes.core.k8s:

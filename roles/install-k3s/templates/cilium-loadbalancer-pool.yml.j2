@@ -7,4 +7,4 @@ spec:
   - cidr: "{{ ik3s_loadbalancer_cidr }}"
   serviceSelector:
     matchLabels:
-      "io.kubernetes.service.namespace": "{{ ik3s_traefik_namespace }}"
+      "app.kubernetes.io/name": "traefik"

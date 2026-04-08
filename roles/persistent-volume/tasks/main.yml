@@ -5,7 +5,6 @@
   ansible.builtin.file:
     path: "{{ pv_host_path }}"
     state: directory
-    recurse: true
     mode: '0755'
 
 - name: Get and set volume size if not predefined, we take the whole disk size

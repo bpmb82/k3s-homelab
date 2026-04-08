@@ -24,9 +24,37 @@
   register: intel_gpu_daemonset
   changed_when: false
 
-- name: Create Intel GPU plugin daemonset
+- name: Create Intel GPU plugin daemonset with Monitoring and Sharing
   kubernetes.core.k8s:
     state: present
     namespace: "{{ ik3s_intel_namespace }}"
-    definition: "{{ intel_gpu_daemonset.stdout | from_yaml_all }}"
+    definition: |
+      {% set docs = intel_gpu_daemonset.stdout | from_yaml_all | list %}
+      {% for doc in docs %}
+      {%   if doc.kind == 'DaemonSet' and doc.metadata.name == 'intel-gpu-plugin' %}
+      {%     set args = doc.spec.template.spec.containers[0].args %}
+      {%     if '-enable-monitoring' not in args %}
+      {%       set _ = args.append('-enable-monitoring') %}
+      {%     endif %}
+      {%     set shared_arg = "-shared-dev-num=" ~ (ik3s_intel_shared_dev_num | default(1)) %}
+      {%     set _ = args.append(shared_arg) %}
+      {%   endif %}
+      {% endfor %}
+      {{ docs }}
     wait: true
+
+- name: Add xvilo helm repo
+  kubernetes.core.helm_repository:
+    name: xvilo
+    repo_url: "https://xvilo.github.io/helm-charts"
+
+- name: Install Intel GPU Exporter
+  kubernetes.core.helm:
+    name: intel-gpu-exporter
+    chart_ref: xvilo/intel-gpu-exporter
+    release_namespace: "{{ ik3s_intel_namespace }}"
+    values:
+      serviceMonitor:
+        enabled: true
+        labels:
+          release: kps

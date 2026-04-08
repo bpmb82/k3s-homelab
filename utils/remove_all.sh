@@ -16,4 +16,4 @@ rm -rf $(which helm)
 
 # Remove k3s
 k3s-uninstall.sh
-rm -rf /k3s
+#rm -rf /k3s

@@ -1,0 +1,48 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for {{ msqt_service }}
+- name: Create the workdir
+  ansible.builtin.file:
+    path: "{{ workdir }}/{{ msqt_service }}/config"
+    state: directory
+    mode: '0755'
+
+- name: Create k8s namespace for {{ msqt_service }}
+  kubernetes.core.k8s:
+    name: "{{ msqt_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Install the helm-charts helm repo
+  ansible.builtin.include_role:
+    name: install-homelab-charts-repo
+
+- name: Create config PV and PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "{{ msqt_service }}-data"
+    pv_kube_namespace: "{{ msqt_kube_namespace }}"
+    pv_host_path: "{{ workdir }}/{{ msqt_service }}/data"
+    pv_servicedir: "{{ workdir }}/{{ msqt_service }}"
+
+- name: Deploy chart for {{ msqt_service }}
+  kubernetes.core.helm:
+    name: "{{ msqt_service }}"
+    chart_ref: homelab-charts/{{ msqt_service }}
+    release_namespace: "{{ msqt_kube_namespace }}"
+    update_repo_cache: true
+    wait: true
+    timeout: "600s"
+    values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
+
+- name: Deploy MQTT ServiceMonitor
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/mqtt-servicemonitor.yml.j2') | from_yaml }}"
+
+- name: Create Traefik ingressroutes
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'templates/traefik_ingress.yml.j2') | from_yaml }}"

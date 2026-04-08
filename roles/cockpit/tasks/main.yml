@@ -46,3 +46,9 @@
           - cockpit-ws
         state: present
         update_cache: true
+
+- name: Enable the cockpit systemd service
+  ansible.builtin.service:
+    name: cockpit
+    state: started
+    enabled: true

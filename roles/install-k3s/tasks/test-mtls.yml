@@ -1,0 +1,120 @@
+---
+# tasks file voor cilium_mtls_test
+
+- name: Zorg dat de test-namespace bestaat
+  ansible.builtin.shell: "kubectl create namespace {{ ik3s_mtls_test_namespace }} --dry-run=client -o yaml | kubectl apply -f -"
+  register: ns_out
+  changed_when: "'created' in ns_out.stdout"
+
+- name: "ik3s | Handmatige registratie van Cilium Operator in SPIRE"
+  ansible.builtin.shell: |
+    kubectl -n cilium-spire exec spire-server-0 -- \
+    ./bin/spire-server entry create \
+        -spiffeID spiffe://spiffe.cilium/cilium-operator \
+        -parentID spiffe://spiffe.cilium/spire/server \
+        -selector k8s:sa:cilium-operator \
+        -selector k8s:ns:kube-system \
+        -admin
+  register: ik3s_spire_reg
+  failed_when: 
+    - ik3s_spire_reg.rc != 0 
+    - "'already exists' not in ik3s_spire_reg.stderr"
+  changed_when: "'created' in ik3s_spire_reg.stdout"
+
+- name: "ik3s | Herstart Cilium Operator om admin-rechten te activeren"
+  ansible.builtin.shell: "kubectl rollout restart deployment cilium-operator -n kube-system"
+  when: ik3s_spire_reg.changed
+
+- name: Deploy test server, service en client pods
+  ansible.builtin.shell: |
+    # Maak de server pod
+    kubectl run mtls-server -n {{ ik3s_mtls_test_namespace }} \
+      --image={{ ik3s_mtls_test_server_image }} \
+      --labels="app=mtls-server" \
+      --overrides='{ "spec": { "terminationGracePeriodSeconds": 0 } }'
+
+    # Maak een Service aan zodat DNS (mtls-server) werkt
+    kubectl expose pod mtls-server -n {{ ik3s_mtls_test_namespace }} \
+      --port=80 --target-port=80 --name=mtls-server
+
+    # Maak de client pod
+    kubectl run mtls-client -n {{ ik3s_mtls_test_namespace }} \
+      --image={{ ik3s_mtls_test_client_image }} \
+      --labels="app=mtls-client" \
+      --overrides='{ "spec": { "terminationGracePeriodSeconds": 0 } }' \
+      -- sleep 3600
+  register: pod_deploy
+  failed_when: 
+    - pod_deploy.rc != 0 
+    - "'already exists' not in pod_deploy.stderr"
+  changed_when: "'created' in pod_deploy.stdout"
+
+- name: Wacht tot de test pods klaar zijn
+  ansible.builtin.shell: "kubectl wait --for=condition=Ready pod -n {{ ik3s_mtls_test_namespace }} --all --timeout=60s"
+  changed_when: false
+
+- name: "ik3s | Haal de huidige SPIRE Agent ID op"
+  ansible.builtin.shell: |
+    kubectl -n cilium-spire exec spire-server-0 -- ./bin/spire-server agent list | grep 'SPIFFE ID' | awk '{print $4}'
+  register: ik3s_spire_agent_id
+  changed_when: false
+
+- name: "ik3s | Registreer test-pods handmatig met juiste Parent ID"
+  ansible.builtin.shell: |
+    kubectl -n cilium-spire exec spire-server-0 -- \
+    ./bin/spire-server entry create \
+        -spiffeID spiffe://spiffe.cilium/ns/{{ ik3s_mtls_test_namespace }}/sa/default \
+        -parentID {{ ik3s_spire_agent_id.stdout }} \
+        -selector k8s:ns:{{ ik3s_mtls_test_namespace }} \
+        -selector k8s:sa:default
+  register: ik3s_manual_reg
+  failed_when: 
+    - ik3s_manual_reg.rc != 0 
+    - "'already exists' not in ik3s_manual_reg.stderr"
+  changed_when: "'created' in ik3s_manual_reg.stdout"
+
+- name: "ik3s | Voer mTLS handshake uit"
+  ansible.builtin.shell: "kubectl exec -n {{ ik3s_mtls_test_namespace }} mtls-client -- curl -s --connect-timeout 5 -o /dev/null -w '%{http_code}' mtls-server"
+  register: ik3s_curl_exec
+  until: ik3s_curl_exec.stdout == "200"
+  retries: 10
+  delay: 2
+  changed_when: false
+
+# - name: "ik3s | Wacht tot Operator de test-pods heeft geregistreerd in SPIRE"
+#   ansible.builtin.shell: |
+#     kubectl -n cilium-spire exec spire-server-0 -- ./bin/spire-server entry show -selector k8s:ns:{{ ik3s_mtls_test_namespace }}
+#   register: ik3s_spire_check
+#   until: "'Found 0 entries' not in ik3s_spire_check.stdout"
+#   retries: 24
+#   delay: 5
+#   changed_when: false
+
+- name: DEBUG - Check of pods wel een SPIFFE ID hebben
+  ansible.builtin.shell: |
+    kubectl -n cilium-spire exec spire-server-0 -- ./bin/spire-server entry show -selector k8s:ns:{{ ik3s_mtls_test_namespace }}
+  register: spire_entries
+  changed_when: false
+
+- name: Toon SPIRE entries
+  ansible.builtin.debug:
+    var: spire_entries.stdout_lines
+
+- name: Verifieer SPIRE authenticatie in Cilium BPF maps
+  ansible.builtin.shell: |
+    CILIUM_POD=$(kubectl -n kube-system get pods -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}')
+    kubectl -n kube-system exec $CILIUM_POD -- cilium-dbg bpf auth list
+  register: bpf_auth
+  until: "'spire' in bpf_auth.stdout and 'OK' in bpf_auth.stdout"
+  retries: 3
+  delay: 2
+  changed_when: false
+
+- name: Rapportage mTLS status
+  ansible.builtin.debug:
+    msg: "mTLS Verificatie Geslaagd: SPIRE identiteit gevonden in BPF maps voor {{ ik3s_mtls_test_namespace }}"
+
+- name: Remove test resources
+  ansible.builtin.shell: "kubectl delete namespace {{ ik3s_mtls_test_namespace }} --wait=false"
+  when: ik3s_mtls_test_cleanup | default(true)
+  changed_when: true

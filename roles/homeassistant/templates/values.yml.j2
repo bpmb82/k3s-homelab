@@ -2,7 +2,7 @@ environment:
   - name: PUID
     value: "1000"
   - name: PGID
-    value: "3000"
+    value: "1000"
   - name: TZ
     value: "UTC"
   - name: HC_BASEPATH
@@ -16,7 +16,11 @@ strategy:
 
 podSecurityContext:
   runAsNonRoot: false
-  fsGroup: 2000
+#   runAsUser: 1000
+#   runAsGroup: 1000
+#   fsGroup: 1000
+
+terminationGracePeriodSeconds: 60
 
 securityContext:
   privileged: false
@@ -31,6 +35,11 @@ securityContext:
       - ALL
 
 {% if ha_akri_enabled %}
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 15"]
+
 resources:
   limits:
 {%   for device in ha_udev %}

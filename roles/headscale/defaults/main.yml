@@ -1,0 +1,12 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for headscale
+hdscl_debug: true
+hdscl_kube_namespace: "headscale"
+hdscl_service: "headscale"
+hdscl_service_port: 8080
+hdscl_image_tag: "latest"
+hdscl_sidecar_service: "headplane"
+hdscl_sidecar_service_port: 3000
+hdscl_sidecar_image_tag: "latest"
+hdscl_service_public_endpoint: "connect2"

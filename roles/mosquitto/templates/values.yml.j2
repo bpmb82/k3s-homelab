@@ -1,0 +1,22 @@
+{# # Additional volumes on the output Deployment definition.
+volumes:
+  - name: {{ msqt_service }}-data
+    persistentVolumeClaim:
+      claimName: {{ msqt_service }}-data
+  - name: configmap-volume
+    configMap:
+      name: {{ msqt_service }}
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: configmap-volume
+    mountPath: /mosquitto/config/mosquitto.conf
+    subPath: mosquitto.conf
+  - name: mosquitto-data
+    mountPath: /mosquitto/data
+    readOnly: false #}
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9000"
+  prometheus.io/path: "/"

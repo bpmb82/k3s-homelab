@@ -4,6 +4,7 @@ metadata:
   name: akri-{{ item.name }}
   namespace: {{ ik3s_akri_namespace }}
 spec:
+  capacity: 1
   discoveryHandler:
     name: udev
     discoveryDetails: |

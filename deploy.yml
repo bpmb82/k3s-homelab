@@ -9,6 +9,8 @@
     - .env.yml
 
   roles:
+    # - role: cockpit
+    #   when: cockpit
     - role: install-k3s
       vars:
         ik3s_workdir: "{{ workdir }}"
@@ -23,7 +25,7 @@
 
     - role: traefik
       vars:
-        trfk_loglevel: "DEBUG"
+        trfk_loglevel: "INFO"
         trfk_domain: "{{ domain }}"
       when: traefik
 
@@ -33,18 +35,17 @@
         kps_grafana_user: "{{ grafana_user }}"
         kps_grafana_password: "{{ grafana_password }}"
 
-    - role: homeassistant
-      vars:
-        ha_workdir: "{{ workdir }}"
-        ha_akri_enabled: "{{ akri_enabled }}"
-        ha_udev: "{{ udev }}"
-      when: homeassistant
+    - role: mosquitto
+      when: mosquitto
 
     - role: sabnzbd
       when: sabnzbd
 
     - role: sonarr
       when: sonarr
+
+    - role: sonarr-lg-remux
+      when: sonarr_lg_remux
 
     - role: radarr
       when: radarr
@@ -60,3 +61,11 @@
 
     - role: slskd
       when: slskd
+
+    - role: homeassistant
+      vars:
+        ha_workdir: "{{ workdir }}"
+        ha_akri_enabled: "{{ akri_enabled }}"
+        ha_udev: "{{ udev }}"
+        ha_extra_config: "{{ extra_config }}"
+      when: homeassistant
