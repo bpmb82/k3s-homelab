@@ -18,5 +18,18 @@ volumeMounts:
 
 podAnnotations:
   prometheus.io/scrape: "true"
-  prometheus.io/port: "9000"
+  prometheus.io/port: "9090"
   prometheus.io/path: "/"
+
+prometheus_export:
+  enabled: true
+  image: docker.io/bpmbee/mosquitto-exporter:latest
+  port: 9090
+  interval: 10s
+  environment:
+    - name: MQTT_HOST
+      value: "127.0.0.1"
+    - name: MQTT_PORT
+      value: "1883"
+    - name: MQTT_TLS
+      value: "false"
