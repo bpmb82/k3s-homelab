@@ -13,6 +13,7 @@ runner:
         labels:
           - "ubuntu-latest:docker://docker.io/catthehacker/ubuntu:act-24.04"
           - "rust-latest:docker://docker.io/catthehacker/ubuntu:rust-24.04"
+          - "ansible-ee:docker://docker.io/bpmbee/ansible-ee:2026.6.11"
         fetch_timeout: "30s"
         envs:
           A_TEST_ENV_NAME_1: null

@@ -32,7 +32,7 @@
         fjr_instance_token: "{{ fjr_api_response.json.token }}"
         fjr_instance_uuid: "{{ fjr_api_response.json.uuid }}"
 
-    - name: Deploy the forgejo-runner Secret with rich JSON context
+    - name: Deploy the forgejo-runner Secret
       kubernetes.core.k8s:
         state: present
         definition: "{{ lookup('ansible.builtin.template', 'templates/secret.yml.j2') | from_yaml }}"

@@ -24,7 +24,6 @@
     - name: Handle Codeberg API runner registration and Secret generation
       ansible.builtin.include_tasks: create_codeberg_runner.yml
 
-    # We maken hier de dynamische PVC aan via de local-path provider
     - name: Create dynamic local-path PVC for build cache
       kubernetes.core.k8s:
         state: present
@@ -52,7 +51,7 @@
         values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
 
   always:
-    - name: Permanently remove temporary chart directory
+    - name: Remove temporary chart directory
       ansible.builtin.file:
         path: "{{ fjr_tmp_chart_dir }}"
         state: absent
