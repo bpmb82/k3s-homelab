@@ -1,0 +1,58 @@
+---
+# tasks file for forgejo-runner
+- name: Create k8s namespace for {{ fjr_service }}
+  kubernetes.core.k8s:
+    name: "{{ fjr_kube_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Clean old temporary chart directory if it exists
+  ansible.builtin.file:
+    path: "{{ fjr_tmp_chart_dir }}"
+    state: absent
+
+- name: Block for chart deployment and cleanup
+  block:
+    - name: Clone Forgejo Runner Helm chart repository
+      ansible.builtin.git:
+        repo: "{{ fjr_git_repo }}"
+        dest: "{{ fjr_tmp_chart_dir }}"
+        depth: 1
+        version: main
+
+    - name: Handle Codeberg API runner registration and Secret generation
+      ansible.builtin.include_tasks: create_codeberg_runner.yml
+
+    # We maken hier de dynamische PVC aan via de local-path provider
+    - name: Create dynamic local-path PVC for build cache
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ fjr_service }}-local-path-cache"
+            namespace: "{{ fjr_kube_namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            storageClassName: "{{ fjr_storage_class_name }}"
+            resources:
+              requests:
+                storage: "{{ fjr_storage_size }}"
+
+    - name: Deploy Forgejo-runner chart from local disk
+      kubernetes.core.helm:
+        name: "{{ fjr_service }}"
+        chart_ref: "{{ fjr_tmp_chart_dir }}"
+        release_namespace: "{{ fjr_kube_namespace }}"
+        wait: true
+        timeout: "600s"
+        values: "{{ lookup('ansible.builtin.template', 'templates/values.yml.j2') | from_yaml }}"
+
+  always:
+    - name: Permanently remove temporary chart directory
+      ansible.builtin.file:
+        path: "{{ fjr_tmp_chart_dir }}"
+        state: absent

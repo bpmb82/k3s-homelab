@@ -1,0 +1,38 @@
+---
+# tasks file to register runner via Forgejo/Codeberg API
+
+- name: Check if the Forgejo Runner secret already exists in Kubernetes
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ fjr_service }}-forgejo-runner-config"
+    namespace: "{{ fjr_kube_namespace }}"
+  register: fjr_existing_secret
+
+- name: Register new runner via Codeberg API if secret is missing
+  when: fjr_existing_secret.resources | length == 0
+  block:
+    - name: Call Codeberg API to register a new runner
+      ansible.builtin.uri:
+        url: "{{ fjr_instance_url }}/api/v1/user/actions/runners"
+        method: POST
+        status_code: 201
+        headers:
+          Authorization: "token {{ fjr_instance_api_token }}"
+          Accept: "application/json"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          name: "{{ fjr_runner_name }}"
+          labels: "ubuntu-latest,debian-latest"
+      register: fjr_api_response
+
+    - name: Set facts from the API registration output
+      ansible.builtin.set_fact:
+        fjr_instance_token: "{{ fjr_api_response.json.token }}"
+        fjr_instance_uuid: "{{ fjr_api_response.json.uuid }}"
+
+    - name: Deploy the forgejo-runner Secret with rich JSON context
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'templates/secret.yml.j2') | from_yaml }}"

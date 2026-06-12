@@ -18,6 +18,14 @@
     repo_url: https://grafana.github.io/helm-charts
     force_update: true
 
+- name: Create loki PVC
+  ansible.builtin.import_role:
+    name: persistent-volume
+  vars:
+    pv_name_label: "loki-storage"
+    pv_kube_namespace: "{{ kps_namespace }}"
+    pv_host_path: "{{ loki_dir }}"
+
 - name: Install grafana loki stack
   kubernetes.core.helm:
     name: loki
@@ -28,6 +36,13 @@
     values:
       loki:
         enabled: true
+        persistence:
+          enabled: true
+          existingClaim: "loki-storage"
+        config:
+          table_manager:
+            retention_deletes_enabled: true
+            retention_period: 336h
       promtail:
         enabled: true
       grafana:

@@ -44,8 +44,8 @@
     # - role: sonarr
     #   when: sonarr
 
-    # - role: sonarr-lg-remux
-    #   when: sonarr_lg_remux
+    # - role: lgremux
+    #   when: lgremux
 
     # - role: radarr
     #   when: radarr
@@ -56,8 +56,8 @@
     # - role: seerr
     #   when: seerr
 
-    - role: jellyfin
-      when: jellyfin
+    # - role: jellyfin
+    #   when: jellyfin
 
     # - role: slskd
     #   when: slskd
@@ -69,3 +69,6 @@
     #     ha_udev: "{{ udev }}"
     #     ha_extra_config: "{{ extra_config }}"
     #   when: homeassistant
+
+    # - role: forgejo-runner
+    #   when: forgejo_runner

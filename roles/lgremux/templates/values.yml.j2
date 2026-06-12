@@ -16,4 +16,9 @@ volumeMounts:
     mountPath: /downloads
     readOnly: false
 
+image:
+  tag: "{{ lr_version }}"
 
+securityContext:
+  runAsUser: {{ lr_userid }}
+  runAsGroup: {{ lr_groupid }}

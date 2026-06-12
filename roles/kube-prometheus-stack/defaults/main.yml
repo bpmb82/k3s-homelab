@@ -7,6 +7,7 @@ kps_helm_repo: "https://prometheus-community.github.io/helm-charts"
 kps_domain: "example.com"
 kps_grafana_user: "admin"
 kps_grafana_password: "admin"
+kps_prometheus_retention_gb: 200
 grafana_dashboards:
   - name: "cilium"
     id: "21431"

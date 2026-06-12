@@ -215,6 +215,7 @@
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
         source <(kubectl completion bash)
         alias k=kubectl
+        alias kns='kubectl config set-context --current --namespace'
         complete -o default -F __start_kubectl k
       fi
     marker: "# {mark} ANSIBLE MANAGED BLOCK KUBECTL"

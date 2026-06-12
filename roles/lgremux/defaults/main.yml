@@ -1,0 +1,10 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for lgremux
+lr_kube_namespace: "sonarr"
+lr_service: "lgremux"
+lr_service_port: 8000
+lr_helm_repo: "https://bpmb82.github.io/homelab-charts/"
+lr_version: "2026.6.8"
+lr_userid: 1000
+lr_groupid: 1000

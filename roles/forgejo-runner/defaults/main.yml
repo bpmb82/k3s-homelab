@@ -1,0 +1,19 @@
+---
+# defaults file for forgejo-runner
+fjr_service: "forgejo-runner"
+fjr_kube_namespace: "forgejo-runner"
+
+fjr_git_repo: "https://code.forgejo.org/forgejo-helm/forgejo-runner.git"
+fjr_tmp_chart_dir: "/tmp/forgejo-runner-chart"
+
+fjr_instance_url: "https://codeberg.org"
+fjr_instance_api_token: "YOUR_PERSONAL_FORGEJO_API_TOKEN"
+fjr_runner_name: "k3s-cluster-runner"
+
+fjr_runner_image: "data.forgejo.org/forgejo/runner"
+fjr_runner_image_tag: "12"
+fjr_runner_image_pull_policy: "Always"
+
+# Dynamische opslag via k3s local-path
+fjr_storage_class_name: "local-path"
+fjr_storage_size: "10Gi"

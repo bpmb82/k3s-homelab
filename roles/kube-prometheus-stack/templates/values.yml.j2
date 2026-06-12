@@ -53,10 +53,14 @@ alertmanager:
       repeat_interval: 12h
       receiver: 'discord-notifications'
       routes:
+        - receiver: 'null'
+          matchers:
+            - alertname = NodeMemoryMajorPagesFaults
         - receiver: 'discord-notifications'
-          match_re:
-            severity: critical|warning
+          matchers:
+            - severity =~ "critical|warning"
     receivers:
+      - name: 'null'
       - name: 'discord-notifications'
         discord_configs:
           - webhook_url: "{{ discord_url }}"
