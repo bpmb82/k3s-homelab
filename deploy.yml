@@ -9,66 +9,67 @@
     - .env.yml
 
   roles:
-    # - role: cockpit
-    #   when: cockpit
-    # - role: install-k3s
-    #   vars:
-    #     ik3s_workdir: "{{ workdir }}"
-    #     ik3s_nfd_enabled: "{{ nfd_enabled }}"
-    #     ik3s_nvidia_enabled: "{{ nvidia_enabled }}"
-    #     ik3s_intel_enabled: "{{ intel_enabled }}"
-    #     ik3s_akri_enabled: "{{ akri_enabled }}"
-    #     ik3s_udev: "{{ udev }}"
-    #     ik3s_loadbalancer_cidr: "{{ loadbalancer_cidr }}"
+    - role: cockpit
+      when: cockpit
 
-    # - role: install-homelab-charts-repo
+    - role: install-k3s
+      vars:
+        ik3s_workdir: "{{ workdir }}"
+        ik3s_nfd_enabled: "{{ nfd_enabled }}"
+        ik3s_nvidia_enabled: "{{ nvidia_enabled }}"
+        ik3s_intel_enabled: "{{ intel_enabled }}"
+        ik3s_akri_enabled: "{{ akri_enabled }}"
+        ik3s_udev: "{{ udev }}"
+        ik3s_loadbalancer_cidr: "{{ loadbalancer_cidr }}"
 
-    # - role: traefik
-    #   vars:
-    #     trfk_loglevel: "INFO"
-    #     trfk_domain: "{{ domain }}"
-    #   when: traefik
+    - role: install-homelab-charts-repo
 
-    # - role: kube-prometheus-stack
-    #   vars:
-    #     kps_domain: "{{ domain }}"
-    #     kps_grafana_user: "{{ grafana_user }}"
-    #     kps_grafana_password: "{{ grafana_password }}"
+    - role: traefik
+      vars:
+        trfk_loglevel: "INFO"
+        trfk_domain: "{{ domain }}"
+      when: traefik
 
-    # - role: mosquitto
-    #   when: mosquitto
+    - role: kube-prometheus-stack
+      vars:
+        kps_domain: "{{ domain }}"
+        kps_grafana_user: "{{ grafana_user }}"
+        kps_grafana_password: "{{ grafana_password }}"
 
-    # - role: sabnzbd
-    #   when: sabnzbd
+    - role: mosquitto
+      when: mosquitto
 
-    # - role: sonarr
-    #   when: sonarr
+    - role: sabnzbd
+      when: sabnzbd
 
-    # - role: lgremux
-    #   when: lgremux
+    - role: sonarr
+      when: sonarr
 
-    # - role: radarr
-    #   when: radarr
+    - role: lgremux
+      when: lgremux
 
-    # - role: bazarr
-    #   when: bazarr
+    - role: radarr
+      when: radarr
 
-    # - role: seerr
-    #   when: seerr
+    - role: bazarr
+      when: bazarr
 
-    # - role: jellyfin
-    #   when: jellyfin
+    - role: seerr
+      when: seerr
 
-    # - role: slskd
-    #   when: slskd
+    - role: jellyfin
+      when: jellyfin
 
-    # - role: homeassistant
-    #   vars:
-    #     ha_workdir: "{{ workdir }}"
-    #     ha_akri_enabled: "{{ akri_enabled }}"
-    #     ha_udev: "{{ udev }}"
-    #     ha_extra_config: "{{ extra_config }}"
-    #   when: homeassistant
+    - role: slskd
+      when: slskd
 
-    # - role: forgejo-runner
-    #   when: forgejo_runner
+    - role: homeassistant
+      vars:
+        ha_workdir: "{{ workdir }}"
+        ha_akri_enabled: "{{ akri_enabled }}"
+        ha_udev: "{{ udev }}"
+        ha_extra_config: "{{ extra_config }}"
+      when: homeassistant
+
+    - role: forgejo-runner
+      when: forgejo_runner
